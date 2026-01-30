@@ -9,5 +9,7 @@
           ".clasp.json"
       ],
       "url": "http://json.schemastore.org/clasp"
-  }]
+}
+],
+"files.autoSave": "afterDelay"
 }
