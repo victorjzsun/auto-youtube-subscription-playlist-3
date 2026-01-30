@@ -28,22 +28,26 @@ Make sure that you have followed the instructions to install local certs (see ma
 
 To run the extended integration test in a pipeline using Github Actions, reference the .github/workflows directory. You'll need to add some additional environment variables through the repo secrets settings in order to get the full flow working:
 
-DOT_CLASPRC - the `.clasprs.json` file from user directory containing clasp login credentials 
+DOT_CLASPRC - the `.clasprs.json` file from user directory containing clasp login credentials
 DOT_CLASP - the `.clasp.json` file from this repo matching the test spreadsheet
 TEST_ACCOUNT_EMAIL, TEST_RECOVERY_EMAIL, TEST_ACCOUNT_PASSWORD, TEST_SPREADSHEET_URL - see above variables
 
 # Additional notes
 
 ### Stealth login
+
 `puppeteer-extra` and `puppeteer-extra-plugin-stealth` are used to help log in to a Google account in the pipeline for the "extended" integration test. They are not easily compatible with the `jest-puppeteer` package, so a custom integration is used that is documented on `jest`'s site [here](jestjs.io/docs/puppeteer#custom-example-without-jest-puppeteer-preset).
 
 ### Generating certs in the pipeline
+
 There are permissions issues running `mkcert -install` in Windows runners, so a powershell script in `./generate-cert.ps1` is used to generate the certs and enable https.
 
 ### Jest open handles
+
 There are issues with `jest` keeping handles open after all tests finish on Windows runners, so `jest --forceExit` is used to resolve them, although this flag may not be needed on certain platforms (like Mac OS).
 
 ### Jest Image Snapshots
+
 `jest-image-snapshot` is used to compare browser snapshots and detect discrepancies or regressions. Thresholds have been adjusted to allow for some variation across different platforms due to differences in font rendering and color profiles.
 
-If a snapshot fails, a diff image is created in the __diff_output__ directory, showing the comparison. If it fails in the pipeline it may be hard to see this diff. An Image Reporter class is used to upload diff images to an S3 bucket from the pipeline. This can be modified to use any image store. If used, make sure it is enabled in `jest.config.js` and that the necessary environment variables (AWS keys, bucket name, etc.) are added to `.env` file (see above section).
+If a snapshot fails, a diff image is created in the **diff_output** directory, showing the comparison. If it fails in the pipeline it may be hard to see this diff. An Image Reporter class is used to upload diff images to an S3 bucket from the pipeline. This can be modified to use any image store. If used, make sure it is enabled in `jest.config.js` and that the necessary environment variables (AWS keys, bucket name, etc.) are added to `.env` file (see above section).

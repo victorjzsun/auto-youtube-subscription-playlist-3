@@ -1,8 +1,4 @@
-import {
-  onOpen,
-  openDialogMUI,
-  openAboutSidebar,
-} from './ui';
+import { onOpen, openDialogMUI, openAboutSidebar } from './ui';
 
 import { getSheetsData, addSheet, deleteSheet, setActiveSheet } from './sheets';
 

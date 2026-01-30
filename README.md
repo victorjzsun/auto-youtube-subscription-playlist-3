@@ -77,7 +77,6 @@ Full steps to getting your local environment set up, deploying your app, and als
 
 https://github.com/enuchi/React-Google-Apps-Script/assets/31550519/83622b83-0d0e-43de-a589-36f96d51c9c4
 
-
 **1.** First, let's clone the repo and install the dependencies. This project is published as a public template, so you can also fork the repo or select "Use this template" in GitHub.
 
 ```bash
@@ -86,12 +85,12 @@ cd React-Google-Apps-Script
 yarn install
 ```
 
-
 **2.** Next, we'll need to log in to [clasp](https://github.com/google/clasp), which lets us manage our Google Apps Script projects locally.
 
 ```bash
 yarn run login
 ```
+
 **3.** Now let's run the setup script to create a New spreadsheet and script project from the command line.
 
 ```bash
@@ -332,7 +331,6 @@ async () => {
 scriptHostFunctions.close(); // close a dialog or sidebar
 scriptHostFunctions.setWidth(400); // set dialog width to 400px
 scriptHostFunctions.setHeight(800); // set dialog height to 800px
-
 ```
 
 In development, `gas-client` will allow you to call server-side functions from your local environment. In production, it will use Google's underlying `google.script.run` utility.

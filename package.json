@@ -22,7 +22,8 @@
     "build": "tsc && vite build --mode production",
     "deploy:dev": "npm run build:dev && npm run push",
     "deploy": "npm run build && npm run push",
-    "start": "npm run deploy:dev && npm run dev"
+    "start": "npm run deploy:dev && npm run dev",
+    "lintends": "prettier --end-of-line lf --write ."
   },
   "keywords": [
     "react",

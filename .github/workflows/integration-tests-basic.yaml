@@ -33,7 +33,7 @@ jobs:
       - name: Install https cert [yarn setup:https]
         run: yarn setup:https
         if: runner.os == 'MacOS'
-      - run: | 
+      - run: |
           mkdir certs
           .\scripts\generate-cert.ps1
         shell: pwsh
