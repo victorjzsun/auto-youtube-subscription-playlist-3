@@ -1,6 +1,14 @@
-import { onOpen, openDialogMUI, openAboutSidebar } from './ui';
+import { openDialogMUI, openAboutSidebar } from './ui';
 
 import { getSheetsData, addSheet, deleteSheet, setActiveSheet } from './sheets';
+
+import {
+  updatePlaylists,
+  getLogs,
+  onOpen,
+  doGet,
+  playlist,
+} from './sheetScript';
 
 // Public functions must be exported as named exports
 export {
@@ -11,4 +19,8 @@ export {
   addSheet,
   deleteSheet,
   setActiveSheet,
+  updatePlaylists,
+  getLogs,
+  doGet,
+  playlist,
 };
