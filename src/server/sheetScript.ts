@@ -10,14 +10,14 @@
 import { onOpen } from "./ui";
 
 // Adjustable to quota of Youtube API
-const maxVideos: number = 200;
+const MAX_VIDEO_COUNT: number = 200;
 
 // Error flags
 let errorflag: boolean = false;
 let plErrorCount: number = 0;
 let totalErrorCount: number = 0;
-const DEBUG_FLAG_DONT_UPDATE_TIMESTAMP: boolean = false;
-const DEBUG_FLAG_DONT_UPDATE_PLAYLISTS: boolean = false;
+const DEBUG_FLAG_DONT_UPDATE_TIMESTAMP: boolean = true;
+const DEBUG_FLAG_DONT_UPDATE_PLAYLISTS: boolean = true;
 const DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND: boolean = false;
 
 // Reserved Row and Column indices (zero-based)
@@ -630,7 +630,7 @@ function addVideosToPlaylist(
   let newIdx: number = idx;
   let newSuccessCount: number = successCount;
   let newErrorCount: number = errorCount;
-  if (totalVids > 0 && totalVids < maxVideos) {
+  if (totalVids > 0 && totalVids < MAX_VIDEO_COUNT) {
     let success: number = 0;
     try {
       YouTube.PlaylistItems!.insert(
@@ -697,8 +697,6 @@ function addVideosToPlaylist(
         );
       }
       newErrorCount += 1;
-      // TODO remove
-      success = 0;
     } finally {
       newIdx += 1;
       newSuccessCount += success;
@@ -721,7 +719,7 @@ function addVideosToPlaylist(
     Logger.log('No new videos yet.');
   } else {
     addError(
-      `The query contains ${totalVids} videos. Script cannot add more than ${maxVideos} videos. Try moving the timestamp closer to today.`
+      `The query contains ${totalVids} videos. Script cannot add more than ${MAX_VIDEO_COUNT} videos. Try moving the timestamp closer to today.`
     );
   }
 }
