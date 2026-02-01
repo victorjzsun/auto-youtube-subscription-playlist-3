@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable no-continue */
-/* eslint-disable prefer-destructuring */
-/* eslint-disable no-use-before-define */
 /**
  * Auto Youtube Subscription Playlist (3)
  * This is a Google Apps Script that automatically adds new Youtube videos to playlists
@@ -11,6 +6,8 @@
  * Copy Spreadsheet:
  * https://docs.google.com/spreadsheets/d/1sZ9U52iuws6ijWPQTmQkXvaZSV3dZ3W9JzhnhNTX9GU/copy
  */
+
+import { onOpen } from "./ui";
 
 // Adjustable to quota of Youtube API
 const maxVideos: number = 200;
@@ -62,6 +59,10 @@ function toIsoString(date: Date): string {
 export function updatePlaylists(
   sheetFromCaller?: GoogleAppsScript.Spreadsheet.Sheet
 ): void {
+  errorflag = false;
+  plErrorCount = 0;
+  totalErrorCount = 0;
+
   let sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined = sheetFromCaller;
   let sheetID: string | null =
     PropertiesService.getScriptProperties().getProperty('sheetID');
@@ -368,6 +369,7 @@ function getAllChannelIds(): string[] {
  * @param lastTimestamp - ISO timestamp to fetch videos published after
  * @returns Array of video IDs
  */
+// @ts-ignore
 function getVideoIds(channelId: string, lastTimestamp: string): string[] {
   const videoIds: string[] = [];
   let nextPageToken: string | undefined = '';
@@ -964,28 +966,6 @@ function addError(s: string): void {
   Logger.log(s);
   errorflag = true;
   plErrorCount += 1;
-}
-
-/**
- * Function to Set Up Google Spreadsheet
- * Triggered when spreadsheet opens
- */
-export function onOpen(): void {
-  SpreadsheetApp.getActiveSpreadsheet().addMenu('Youtube Controls', [
-    { name: 'Update Playlists', functionName: 'updatePlaylists' },
-  ]);
-  const ss: GoogleAppsScript.Spreadsheet.Spreadsheet =
-    SpreadsheetApp.getActiveSpreadsheet();
-  const sheet: GoogleAppsScript.Spreadsheet.Sheet = ss.getSheets()[0];
-  if (!sheet || sheet.getRange('A3').getValue() !== 'Playlist ID') {
-    const additional: string = sheet
-      ? `, instead found sheet with name ${sheet.getName()}`
-      : '';
-    throw new Error(
-      `Cannot find playlist sheet, make sure the sheet with playlist IDs and channels is the first sheet (leftmost)${additional}`
-    );
-  }
-  PropertiesService.getScriptProperties().setProperty('sheetID', ss.getId());
 }
 
 /**
