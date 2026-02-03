@@ -16,8 +16,8 @@ const MAX_VIDEO_COUNT: number = 200;
 // Debug Flags
 // Helper to define constant booleans to avoid compiler optimizations
 const bool = (boolean: boolean): boolean => boolean;
-const DEBUG_FLAG_DONT_UPDATE_TIMESTAMP: boolean = bool(true);
-const DEBUG_FLAG_DONT_UPDATE_PLAYLISTS: boolean = bool(true);
+const DEBUG_FLAG_DONT_UPDATE_TIMESTAMP: boolean = bool(false);
+const DEBUG_FLAG_DONT_UPDATE_PLAYLISTS: boolean = bool(false);
 const DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND: boolean = bool(false);
 
 // Reserved Row and Column indices (zero-based)

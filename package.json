@@ -14,7 +14,7 @@
     "test:integration:extended": "cross-env IS_EXTENDED=true jest --forceExit test/local-development.test",
     "test:integration:extended:ci-reporter": "cross-env IS_EXTENDED=true jest --forceExit || node test/utils/image-reporter-standalone.js",
     "login": "clasp login",
-    "setup": "rimraf .clasp.json && mkdirp dist && clasp create --type sheets --title \"My React Project\" --rootDir ./dist && mv ./dist/.clasp.json ./.clasp.json && rimraf dist",
+    "setup": "rimraf .clasp.json && mkdirp dist && clasp create --type sheets --title \"My React Project\" --rootDir ./dist && rimraf dist",
     "open": "clasp open --addon",
     "push": "clasp push",
     "setup:https": "mkdirp certs && mkcert -key-file ./certs/key.pem -cert-file ./certs/cert.pem localhost 127.0.0.1",
@@ -88,8 +88,8 @@
     "rollup": "^4.18.0",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.2.2",
-    "vite": "^7.3.1",
+    "vite": "^5.2.0",
     "vite-plugin-singlefile": "^2.0.1",
-    "vite-plugin-static-copy": "^3.2.0"
+    "vite-plugin-static-copy": "^1.0.1"
   }
 }
