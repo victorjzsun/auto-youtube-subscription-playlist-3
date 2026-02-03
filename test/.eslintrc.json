@@ -33,6 +33,7 @@
     "import/no-extraneous-dependencies": "warn",
     "import/extensions": "off",
     "jest/expect-expect": "off",
+    "no-console": "off",
     "no-new": "off",
     "no-underscore-dangle": "off"
   }

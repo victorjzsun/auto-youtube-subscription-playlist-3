@@ -12,15 +12,9 @@
     "googleappsscript/googleappsscript": true
   },
   "rules": {
-    "prettier/prettier": "error",
-    "camelcase": "warn",
-    "import/prefer-default-export": "warn",
-    "import/no-extraneous-dependencies": "warn",
-    "prefer-object-spread": "warn",
     "@typescript-eslint/no-explicit-any": "warn",
-    "no-continue": "off",
-    "prefer-destructuring": "off",
-    "no-use-before-define": "off",
+    "@typescript-eslint/no-unused-vars": "warn",
+    "camelcase": "warn",
     "import/extensions": [
       "error",
       "ignorePackages",
@@ -28,7 +22,15 @@
         "js": "never",
         "ts": "never"
       }
-    ]
+    ],
+    "import/no-extraneous-dependencies": "warn",
+    "import/prefer-default-export": "warn",
+    "no-continue": "off",
+    "no-new-wrappers": "off", 
+    "no-use-before-define": "off",
+    "prefer-object-spread": "warn",
+    "prettier/prettier": "error",
+    "prefer-destructuring": "off"
   },
   "settings": {
     "import/resolver": {

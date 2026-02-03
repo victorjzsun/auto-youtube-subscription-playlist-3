@@ -7,18 +7,18 @@
  * https://docs.google.com/spreadsheets/d/1sZ9U52iuws6ijWPQTmQkXvaZSV3dZ3W9JzhnhNTX9GU/copy
  */
 
-import { onOpen } from "./ui";
+import { onOpen } from './ui';
+import ErrorTracker from './ErrorTracker';
 
 // Adjustable to quota of Youtube API
 const MAX_VIDEO_COUNT: number = 200;
 
-// Error flags
-let errorflag: boolean = false;
-let plErrorCount: number = 0;
-let totalErrorCount: number = 0;
-const DEBUG_FLAG_DONT_UPDATE_TIMESTAMP: boolean = true;
-const DEBUG_FLAG_DONT_UPDATE_PLAYLISTS: boolean = true;
-const DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND: boolean = false;
+// Debug Flags
+// Helper to define constant booleans to avoid compiler optimizations
+const bool = (boolean: boolean): boolean => boolean;
+const DEBUG_FLAG_DONT_UPDATE_TIMESTAMP: boolean = bool(true);
+const DEBUG_FLAG_DONT_UPDATE_PLAYLISTS: boolean = bool(true);
+const DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND: boolean = bool(false);
 
 // Reserved Row and Column indices (zero-based)
 // If you use getRange remember those indices are one-based, so add + 1 in that call i.e.
@@ -59,9 +59,7 @@ function toIsoString(date: Date): string {
 export function updatePlaylists(
   sheetFromCaller?: GoogleAppsScript.Spreadsheet.Sheet
 ): void {
-  errorflag = false;
-  plErrorCount = 0;
-  totalErrorCount = 0;
+  const errorTracker = new ErrorTracker();
 
   let sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined = sheetFromCaller;
   let sheetID: string | null =
@@ -141,9 +139,9 @@ export function updatePlaylists(
         const channel: string = data[iRow][iColumn];
         if (!channel) continue;
         else if (channel === 'ALL') {
-          const newChannelIds: string[] = getAllChannelIds();
+          const newChannelIds: string[] = getAllChannelIds(errorTracker);
           if (!newChannelIds || newChannelIds.length === 0) {
-            addError('Could not find any subscriptions');
+            errorTracker.addError('Could not find any subscriptions');
           } else {
             channelIds.push(...newChannelIds);
           }
@@ -159,18 +157,18 @@ export function updatePlaylists(
                 maxResults: 1,
               });
             if (!user || !user.items) {
-              addError(`Cannot query for user ${channel}`);
+              errorTracker.addError(`Cannot query for user ${channel}`);
             } else if (user.items.length === 0) {
-              addError(`No user with name ${channel}`);
+              errorTracker.addError(`No user with name ${channel}`);
             } else if (user.items.length !== 1) {
-              addError(`Multiple users with name ${channel}`);
+              errorTracker.addError(`Multiple users with name ${channel}`);
             } else if (!user.items[0].id) {
-              addError(`Cannot get id from user ${channel}`);
+              errorTracker.addError(`Cannot get id from user ${channel}`);
             } else {
               channelIds.push(user.items[0].id);
             }
           } catch (e: any) {
-            addError(
+            errorTracker.addError(
               `Cannot search for channel with name ${channel}, ERROR: Message: [${
                 e.message
               }] Details: ${JSON.stringify(e.details)}`
@@ -187,10 +185,13 @@ export function updatePlaylists(
       for (let i: number = 0; i < channelIds.length; i += 1) {
         const videoIds: string[] = getVideoIdsWithLessQueries(
           channelIds[i],
-          lastTimestamp
+          lastTimestamp,
+          errorTracker
         );
         if (!videoIds || typeof videoIds !== 'object') {
-          addError(`Failed to get videos with channel id ${channelIds[i]}`);
+          errorTracker.addError(
+            `Failed to get videos with channel id ${channelIds[i]}`
+          );
         } else if (
           DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND &&
           videoIds.length === 0
@@ -203,10 +204,13 @@ export function updatePlaylists(
       for (let i: number = 0; i < playlistIds.length; i += 1) {
         const videoIds: string[] = getPlaylistVideoIds(
           playlistIds[i],
-          lastTimestamp
+          lastTimestamp,
+          errorTracker
         );
         if (!videoIds || typeof videoIds !== 'object') {
-          addError(`Failed to get videos with playlist id ${playlistIds[i]}`);
+          errorTracker.addError(
+            `Failed to get videos with playlist id ${playlistIds[i]}`
+          );
         } else if (
           DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND &&
           videoIds.length === 0
@@ -219,12 +223,12 @@ export function updatePlaylists(
 
       Logger.log(`Acquired ${newVideoIds.length} videos`);
 
-      if (!errorflag) {
+      if (!errorTracker.hasErrors()) {
         // ...add videos to playlist...
         if (!DEBUG_FLAG_DONT_UPDATE_PLAYLISTS) {
-          addVideosToPlaylist(playlistId, newVideoIds);
+          addVideosToPlaylist(playlistId, newVideoIds, errorTracker);
         } else {
-          addError("Don't Update Playlists debug flag is set");
+          errorTracker.addError("Don't Update Playlists debug flag is set");
         }
 
         /// ...delete old videos in playlist
@@ -234,11 +238,11 @@ export function updatePlaylists(
             new Date(new Date().getTime() - daysBack * MILLIS_PER_DAY)
           );
           Logger.log(`Delete before: ${deleteBeforeTimestamp}`);
-          deletePlaylistItems(playlistId, deleteBeforeTimestamp);
+          deletePlaylistItems(playlistId, deleteBeforeTimestamp, errorTracker);
         }
       }
       // Update timestamp
-      if (!errorflag && !DEBUG_FLAG_DONT_UPDATE_TIMESTAMP) {
+      if (!errorTracker.hasErrors() && !DEBUG_FLAG_DONT_UPDATE_TIMESTAMP) {
         sheet
           .getRange(iRow + 1, reservedColumnTimestamp + 1)
           .setValue(toIsoString(new Date()));
@@ -255,13 +259,11 @@ export function updatePlaylists(
         .setValues(newLogs);
     }
     nextDebugRow += newLogs.length;
-    errorflag = false;
-    totalErrorCount += plErrorCount;
-    plErrorCount = 0;
+    errorTracker.resetForNextPlaylist();
   }
 
   // Log finished script, only populate second column to signify end of execution when retrieving logs
-  if (totalErrorCount === 0) {
+  if (errorTracker.getTotalErrorCount() === 0) {
     debugSheet
       .getRange(nextDebugRow + 1, nextDebugCol + 2)
       .setValue('Updated all rows, script successfully finished');
@@ -282,9 +284,9 @@ export function updatePlaylists(
   if (debugViewerSheet) {
     loadLastDebugLog(debugViewerSheet);
   }
-  if (totalErrorCount > 0) {
+  if (errorTracker.getTotalErrorCount() > 0) {
     throw new Error(
-      `${totalErrorCount} video(s) were not added to playlists correctly, please check Debug sheet. Timestamps for respective rows has not been updated.`
+      `${errorTracker.getTotalErrorCount()} video(s) were not added to playlists correctly, please check Debug sheet. Timestamps for respective rows has not been updated.`
     );
   }
 }
@@ -296,9 +298,10 @@ export function updatePlaylists(
 /**
  * Get Channel IDs from Subscriptions (ALL keyword)
  * Source: https://www.reddit.com/r/youtube/comments/3br98c/a_way_to_automatically_add_subscriptions_to/
+ * @param errorTracker - ErrorTracker instance for logging errors
  * @returns Array of channel IDs from user's subscriptions
  */
-function getAllChannelIds(): string[] {
+function getAllChannelIds(errorTracker: ErrorTracker): string[] {
   let AboResponse: GoogleAppsScript.YouTube.Schema.SubscriptionListResponse;
   const AboList: [string[], string[]] = [[], []];
   // Workaround: nextPageToken API-Bug (these Tokens are limited to 1000 Subscriptions... but you can add more Tokens.)
@@ -341,13 +344,13 @@ function getAllChannelIds(): string[] {
       nptPage += 1;
     } while (AboResponse.items!.length > 0 && nptPage < 20);
     if (AboList[0].length !== AboList[1].length) {
-      addError(
+      errorTracker.addError(
         `While getting subscriptions, the number of titles (${AboList[0].length}) did not match the number of channels (${AboList[1].length}).`
       );
       return [];
     }
   } catch (e: any) {
-    addError(
+    errorTracker.addError(
       `Could not get subscribed channels, ERROR: Message: [${
         e.message
       }] Details: ${JSON.stringify(e.details)}`
@@ -367,10 +370,15 @@ function getAllChannelIds(): string[] {
  * Get new videos from Channels using YouTube Search API
  * @param channelId - The YouTube channel ID
  * @param lastTimestamp - ISO timestamp to fetch videos published after
+ * @param errorTracker - ErrorTracker instance for logging errors
  * @returns Array of video IDs
  */
-// @ts-ignore
-function getVideoIds(channelId: string, lastTimestamp: string): string[] {
+// @ts-expect-error Unused due to quota issues, can be used if higher quota is available
+function getVideoIds(
+  channelId: string,
+  lastTimestamp: string,
+  errorTracker: ErrorTracker
+): string[] {
   const videoIds: string[] = [];
   let nextPageToken: string | undefined = '';
   do {
@@ -385,7 +393,7 @@ function getVideoIds(channelId: string, lastTimestamp: string): string[] {
           type: 'video',
         });
       if (!results || !results.items) {
-        addError(
+        errorTracker.addError(
           `YouTube video search returned invalid response for channel with id ${channelId}`
         );
         return [];
@@ -421,17 +429,17 @@ function getVideoIds(channelId: string, lastTimestamp: string): string[] {
           id: channelId,
         });
       if (!results || !results.items) {
-        addError(
+        errorTracker.addError(
           `YouTube channel search returned invalid response for channel with id ${channelId}`
         );
         return [];
       }
       if (results.items.length === 0) {
-        addError(`Cannot find channel with id ${channelId}`);
+        errorTracker.addError(`Cannot find channel with id ${channelId}`);
         return [];
       }
     } catch (e: any) {
-      addError(
+      errorTracker.addError(
         `Cannot search YouTube for channel with id ${channelId}, ERROR: Message: [${
           e.message
         }] Details: ${JSON.stringify(e.details)}`
@@ -448,11 +456,13 @@ function getVideoIds(channelId: string, lastTimestamp: string): string[] {
  * Slower and date ordering is a bit messy but less quota costs
  * @param channelId - The YouTube channel ID
  * @param lastTimestamp - ISO timestamp to filter videos
+ * @param errorTracker - ErrorTracker instance for logging errors
  * @returns Array of video IDs
  */
 function getVideoIdsWithLessQueries(
   channelId: string,
-  lastTimestamp: string
+  lastTimestamp: string,
+  errorTracker: ErrorTracker
 ): string[] {
   const videoIds: string[] = [];
   let uploadsPlaylistId: string;
@@ -463,19 +473,19 @@ function getVideoIdsWithLessQueries(
         id: channelId,
       });
     if (!results || !results.items) {
-      addError(
+      errorTracker.addError(
         `YouTube channel search returned invalid response for channel with id ${channelId}`
       );
       return [];
     }
     if (results.items.length === 0) {
-      addError(`Cannot find channel with id ${channelId}`);
+      errorTracker.addError(`Cannot find channel with id ${channelId}`);
       return [];
     }
     uploadsPlaylistId =
       results.items[0].contentDetails!.relatedPlaylists!.uploads!;
   } catch (e: any) {
-    addError(
+    errorTracker.addError(
       `Cannot search YouTube for channel with id ${channelId}, ERROR: Message: [${
         e.message
       }] Details: ${JSON.stringify(e.details)}`
@@ -512,7 +522,7 @@ function getVideoIdsWithLessQueries(
     } catch (e: any) {
       if (e.details.code !== 404) {
         // Skip error count if Playlist isn't found, then channel is empty
-        addError(
+        errorTracker.addError(
           `Cannot search YouTube with playlist id ${uploadsPlaylistId}, ERROR: Message: [${
             e.message
           }] Details: ${JSON.stringify(e.details)}`
@@ -535,11 +545,13 @@ function getVideoIdsWithLessQueries(
  * Get Video IDs from Playlist
  * @param playlistId - The YouTube playlist ID
  * @param lastTimestamp - ISO timestamp to filter videos
+ * @param errorTracker - ErrorTracker instance for logging errors
  * @returns Array of video IDs
  */
 function getPlaylistVideoIds(
   playlistId: string,
-  lastTimestamp: string
+  lastTimestamp: string,
+  errorTracker: ErrorTracker
 ): string[] {
   const videoIds: string[] = [];
   let nextPageToken: string | undefined = '';
@@ -554,7 +566,7 @@ function getPlaylistVideoIds(
           pageToken: nextPageToken,
         });
       if (!results || !results.items) {
-        addError(
+        errorTracker.addError(
           `YouTube playlist search returned invalid response for playlist with id ${playlistId}`
         );
         return [];
@@ -585,17 +597,17 @@ function getPlaylistVideoIds(
           id: playlistId,
         });
       if (!results || !results.items) {
-        addError(
+        errorTracker.addError(
           `YouTube channel search returned invalid response for playlist with id ${playlistId}`
         );
         return [];
       }
       if (results.items.length === 0) {
-        addError(`Cannot find playlist with id ${playlistId}`);
+        errorTracker.addError(`Cannot find playlist with id ${playlistId}`);
         return [];
       }
     } catch (e: any) {
-      addError(
+      errorTracker.addError(
         `Cannot lookup playlist with id ${playlistId} on YouTube, ERROR: Message: [${
           e.message
         }] Details: ${JSON.stringify(e.details)}`
@@ -615,59 +627,67 @@ function getPlaylistVideoIds(
  * Add Videos to Playlist using Video IDs obtained before
  * @param playlistId - Target playlist ID
  * @param videoIds - Array of video IDs to add
- * @param idx - Current index (default: 0)
- * @param successCount - Success counter (default: 0)
- * @param errorCount - Error counter (default: 0)
+ * @param errorTracker - ErrorTracker instance for logging errors
  */
 function addVideosToPlaylist(
   playlistId: string,
   videoIds: string[],
-  idx: number = 0,
-  successCount: number = 0,
-  errorCount: number = 0
+  errorTracker: ErrorTracker
 ): void {
   const totalVids: number = videoIds.length;
-  let newIdx: number = idx;
-  let newSuccessCount: number = successCount;
-  let newErrorCount: number = errorCount;
-  if (totalVids > 0 && totalVids < MAX_VIDEO_COUNT) {
-    let success: number = 0;
+
+  if (totalVids === 0) {
+    Logger.log('No new videos yet.');
+    return;
+  }
+
+  if (totalVids >= MAX_VIDEO_COUNT) {
+    errorTracker.addError(
+      `The query contains ${totalVids} videos. Script cannot add more than ${MAX_VIDEO_COUNT} videos. Try moving the timestamp closer to today.`
+    );
+    return;
+  }
+
+  let successCount: number = 0;
+  const errorCountBefore: number = errorTracker.getPlaylistErrorCount();
+
+  for (let idx = 0; idx < totalVids; idx += 1) {
     try {
       YouTube.PlaylistItems!.insert(
         {
           snippet: {
             playlistId,
             resourceId: {
-              videoId: videoIds[newIdx],
+              videoId: videoIds[idx],
               kind: 'youtube#video',
             },
           },
         },
         'snippet'
       );
-      success = 1;
+      successCount += 1;
     } catch (e: any) {
       if (e.details.code === 404) {
-        // Skip error count if video is private (found when using getPlaylistVideoIds)
+        // Check if video is private
         try {
           const results: GoogleAppsScript.YouTube.Schema.VideoListResponse =
             YouTube.Videos!.list('snippet', {
-              id: videoIds[newIdx],
+              id: videoIds[idx],
             });
           if (results.items!.length === 0) {
+            // Private video - log but don't count as error
             Logger.log(
-              `Couldn't update playlist with video (${videoIds[newIdx]}), ERROR: Cannot find video, most likely private`
+              `Couldn't update playlist with video (${videoIds[idx]}), ERROR: Cannot find video, most likely private`
             );
-            newErrorCount -= 1;
           } else {
-            addError(
-              `Couldn't update playlist with video (${videoIds[newIdx]}), 404 on update, but found video with API, not sure what to do`
+            errorTracker.addError(
+              `Couldn't update playlist with video (${videoIds[idx]}), 404 on update, but found video with API, not sure what to do`
             );
           }
         } catch (e2: any) {
-          addError(
+          errorTracker.addError(
             `Couldn't update playlist with video (${
-              videoIds[newIdx]
+              videoIds[idx]
             }), 404 on update (got ${
               e.message
             }), tried to search for video with id, got ERROR: Message: [${
@@ -679,59 +699,43 @@ function addVideosToPlaylist(
         e.details.code === 400 &&
         e.details.errors[0].reason === 'playlistOperationUnsupported'
       ) {
-        addError(
+        errorTracker.addError(
           "Couldn't update watch later or watch history playlist with video, functionality deprecated; try adding videos to a different playlist"
         );
       } else if (e.details.code === 409) {
-        // Skip error count if Video exists in playlist already
+        // Duplicate video - log but don't count as error
         Logger.log(
-          `Couldn't update playlist with video (${videoIds[newIdx]}), ERROR: Video already exists`
+          `Couldn't update playlist with video (${videoIds[idx]}), ERROR: Video already exists`
         );
       } else {
-        addError(
+        errorTracker.addError(
           `Couldn't update playlist with video (${
-            videoIds[newIdx]
+            videoIds[idx]
           }), ERROR: Message: [${e.message}] Details: ${JSON.stringify(
             e.details
           )}`
         );
       }
-      newErrorCount += 1;
-    } finally {
-      newIdx += 1;
-      newSuccessCount += success;
-      if (totalVids === newIdx) {
-        Logger.log(
-          `Added ${newSuccessCount} video(s) to playlist. Error for ${newErrorCount} video(s).`
-        );
-        errorflag = newErrorCount > 0;
-      } else {
-        addVideosToPlaylist(
-          playlistId,
-          videoIds,
-          newIdx,
-          newSuccessCount,
-          newErrorCount
-        );
-      }
     }
-  } else if (totalVids === 0) {
-    Logger.log('No new videos yet.');
-  } else {
-    addError(
-      `The query contains ${totalVids} videos. Script cannot add more than ${MAX_VIDEO_COUNT} videos. Try moving the timestamp closer to today.`
-    );
   }
+
+  const errorCountAfter: number = errorTracker.getPlaylistErrorCount();
+  const errorCount: number = errorCountAfter - errorCountBefore;
+  Logger.log(
+    `Added ${successCount} video(s) to playlist. Error for ${errorCount} video(s).`
+  );
 }
 
 /**
  * Delete Videos from Playlist if they're older than the defined time
  * @param playlistId - Playlist to clean up
  * @param deleteBeforeTimestamp - ISO timestamp - videos older than this are deleted
+ * @param errorTracker - ErrorTracker instance for logging errors
  */
 function deletePlaylistItems(
   playlistId: string,
-  deleteBeforeTimestamp: string
+  deleteBeforeTimestamp: string,
+  errorTracker: ErrorTracker
 ): void {
   let nextPageToken: string | undefined = '';
   const allVideos: GoogleAppsScript.YouTube.Schema.PlaylistItem[] = [];
@@ -760,7 +764,7 @@ function deletePlaylistItems(
 
       nextPageToken = results.nextPageToken;
     } catch (e: any) {
-      addError(
+      errorTracker.addError(
         `Problem deleting existing videos from playlist with id ${playlistId}, ERROR: Message: [${
           e.message
         }] Details: ${JSON.stringify(e.details)}`
@@ -793,7 +797,7 @@ function deletePlaylistItems(
       }
     );
   } catch (e: any) {
-    addError(
+    errorTracker.addError(
       `Problem deleting duplicate videos from playlist with id ${playlistId}, ERROR: Message: [${
         e.message
       }] Details: ${JSON.stringify(e.details)}`
@@ -813,7 +817,7 @@ function deletePlaylistItems(
 function getNextDebugCol(
   debugSheet: GoogleAppsScript.Spreadsheet.Sheet
 ): number {
-  const data: any[][] = debugSheet.getDataRange().getValues();
+  const data: string[][] = debugSheet.getDataRange().getValues();
   // Only one column, not filled yet, return this column
   if (data.length < reservedDebugNumRows) return 0;
   // Need to iterate since next col might be in middle of data
@@ -838,7 +842,7 @@ function getNextDebugRow(
   debugSheet: GoogleAppsScript.Spreadsheet.Sheet,
   nextDebugCol: number
 ): number {
-  const data: any[][] = debugSheet.getDataRange().getValues();
+  const data: string[][] = debugSheet.getDataRange().getValues();
   // Empty sheet, return first row
   if (data.length === 1 && data[0].length === 1 && data[0][0] === '') return 0;
   // Only one column, not filled yet, return last row + 1
@@ -935,7 +939,7 @@ export function getLogs(timestamp: string): string[][] | string {
   const debugSheet: GoogleAppsScript.Spreadsheet.Sheet | null =
     SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DebugData');
   if (!debugSheet) throw Error('No debug logs');
-  const data: any[][] = debugSheet.getDataRange().getValues();
+  const data: string[][] = debugSheet.getDataRange().getValues();
   const results: string[][] = [];
   for (let col = 0; col < data[0].length; col += 2) {
     for (let row = 0; row < data.length; row += 1) {
@@ -953,18 +957,8 @@ export function getLogs(timestamp: string): string[][] | string {
 
 //
 // Functions for Housekeeping
-// Makes Web App, function call from Google Sheets, add errors, etc
+// Makes Web App, function call from Google Sheets, etc
 //
-
-/**
- * Log errors in debug sheet and throw an error
- * @param s - Error message string
- */
-function addError(s: string): void {
-  Logger.log(s);
-  errorflag = true;
-  plErrorCount += 1;
-}
 
 /**
  * Extended DoGet event interface with URL parameters
@@ -1017,7 +1011,7 @@ export function doGet(e: DoGetEvent): GoogleAppsScript.HTML.HtmlOutput {
 export function playlist(pl: number | undefined, sheetID: string): string {
   const sheet: GoogleAppsScript.Spreadsheet.Sheet =
     SpreadsheetApp.openById(sheetID).getSheets()[0];
-  const data: any[][] = sheet.getDataRange().getValues();
+  const data: string[][] = sheet.getDataRange().getValues();
   let plRow: number;
   if (pl === undefined) {
     plRow = reservedTableRows;

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "lint": "eslint .",
+    "lint": "eslint . --fix",
     "test:integration": "jest --forceExit test/local-development.test",
     "test:integration:extended": "cross-env IS_EXTENDED=true jest --forceExit test/local-development.test",
     "test:integration:extended:ci-reporter": "cross-env IS_EXTENDED=true jest --forceExit || node test/utils/image-reporter-standalone.js",
