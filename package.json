@@ -1,11 +1,11 @@
 {
-  "name": "react-google-apps-script",
-  "version": "3.1.0",
+  "name": "auto-youtube-subscription-playlist-3",
+  "version": "1.0.0",
   "type": "module",
-  "description": "Starter project for using React with Google Apps Script",
+  "description": "Auto YouTube Subscription Playlist - React + Google Apps Script",
   "repository": {
     "type": "git",
-    "url": "https://github.com/enuchi/React-Google-Apps-Script.git"
+    "url": "https://github.com/victorjzsun/auto-youtube-subscription-playlist-3"
   },
   "scripts": {
     "dev": "vite",
@@ -32,7 +32,7 @@
     "script",
     "sheets"
   ],
-  "author": "Elisha Nuchi",
+  "author": "Victor Sun",
   "license": "MIT",
   "engines": {
     "node": ">=10.0.0",
@@ -50,8 +50,10 @@
     "react-transition-group": "^4.4.2"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.981.0",
+    "@aws-sdk/credential-providers": "^3.981.0",
     "@babel/preset-env": "^7.24.6",
-    "@google/clasp": "^2.4.2",
+    "@google/clasp": "^3.2.0",
     "@types/expect-puppeteer": "^5.0.0",
     "@types/jest-environment-puppeteer": "^5.0.2",
     "@types/node": "^20.11.30",
@@ -62,7 +64,6 @@
     "@typescript-eslint/parser": "^8.53.1",
     "@vitejs/plugin-react-swc": "^3.5.0",
     "autoprefixer": "^10.4.19",
-    "aws-sdk": "^2.1106.0",
     "cross-env": "^7.0.3",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
@@ -81,14 +82,14 @@
     "postcss": "^8.4.38",
     "postcss-preset-env": "^9.5.4",
     "prettier": "^2.7.0",
-    "puppeteer": "^14.3.0",
+    "puppeteer": "^24.36.1",
     "puppeteer-extra": "^3.2.3",
     "puppeteer-extra-plugin-stealth": "^2.9.0",
     "rollup": "^4.18.0",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.2.2",
-    "vite": "^5.2.0",
+    "vite": "^7.3.1",
     "vite-plugin-singlefile": "^2.0.1",
-    "vite-plugin-static-copy": "^1.0.1"
+    "vite-plugin-static-copy": "^3.2.0"
   }
 }

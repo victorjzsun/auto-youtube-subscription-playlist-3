@@ -14,20 +14,15 @@
  */
 
 import fs from 'fs';
-import AWS from 'aws-sdk/global.js';
-import S3 from 'aws-sdk/clients/s3.js'; // this is needed
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { fromEnv } from '@aws-sdk/credential-providers';
 
 import dotenv from 'dotenv';
 dotenv.config();
 
 const UPLOAD_BUCKET = process.env.S3_BUCKET_NAME;
 
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-});
-
-const s3 = new AWS.S3({ apiVersion: '2006-03-01' });
+const s3 = new S3Client({ credentials: fromEnv(), region: 'us-east-1' });
 
 export default class ImageReporter {
   constructor(globalConfig, options) {
@@ -66,14 +61,12 @@ export default class ImageReporter {
               Key: path,
               ContentType: 'image/png',
             };
-            s3.putObject(params, (err) => {
-              if (err) {
-                console.log(err, err.stack);
-              } else {
-                console.log(
-                  `Uploaded file to https://${UPLOAD_BUCKET}.s3.amazonaws.com/${path}`
-                );
-              }
+            s3.send(new PutObjectCommand(params)).then(() => {
+              console.log(
+                `Uploaded file to https://${UPLOAD_BUCKET}.s3.amazonaws.com/${path}`
+              );
+            }).catch((err) => {
+              console.log(err, err.stack);
             });
           }
         );
