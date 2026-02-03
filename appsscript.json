@@ -1,6 +1,14 @@
 {
   "timeZone": "America/New_York",
-  "dependencies": {},
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "YouTube",
+        "serviceId": "youtube",
+        "version": "v3"
+      }
+    ]
+  },
   "exceptionLogging": "STACKDRIVER",
   "oauthScopes": [
     "https://www.googleapis.com/auth/script.container.ui",
