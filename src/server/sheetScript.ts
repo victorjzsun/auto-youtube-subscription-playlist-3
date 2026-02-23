@@ -23,12 +23,13 @@ const DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND: boolean = bool(false);
 // Reserved Row and Column indices (zero-based)
 // If you use getRange remember those indices are one-based, so add + 1 in that call i.e.
 // sheet.getRange(iRow + 1, reservedColumnTimestamp + 1).setValue(isodate);
-const reservedTableRows: number = 3; // Start of the range of the PlaylistID+ChannelID data
-const reservedTableColumns: number = 5; // Start of the range of the ChannelID data (0: A, 1: B, 2: C, 3: D, 4: E, 5: F, ...)
-const reservedColumnPlaylist: number = 0; // Column containing playlist to add to
-const reservedColumnTimestamp: number = 1; // Column containing last timestamp
-const reservedColumnFrequency: number = 2; // Column containing number of hours until new check
-const reservedColumnDeleteDays: number = 3; // Column containing number of days before today until videos get deleted
+const reservedTableRows: number = 3;          // Start of the range of the PlaylistID+ChannelID data
+const reservedTableColumns: number = 6;       // Start of the range of the ChannelID data (0: A, 1: B, 2: C, 3: D, 4: E, 5: F, ...)
+const reservedColumnPlaylist: number = 0;     // Column containing playlist to add to
+const reservedColumnTimestamp: number = 1;    // Column containing last timestamp
+const reservedColumnFrequency: number = 2;    // Column containing number of hours until new check
+const reservedColumnDeleteDays: number = 3;   // Column containing number of days before today until videos get deleted
+const reservedColumnShortsFilter: number = 4; // Column containing switch for using shorts filter
 
 // Reserved lengths
 const reservedDebugNumRows: number = 900; // Number of rows to use in a column before moving on to the next column in debug sheet
@@ -223,10 +224,16 @@ export function updatePlaylists(
 
       Logger.log(`Acquired ${newVideoIds.length} videos`);
 
+      const filteredVideoIds: string[] = applyFilters(newVideoIds, sheet, iRow);
+
+      Logger.log(
+        `Filtering finished, left with ${filteredVideoIds.length} videos`
+      );
+
       if (!errorTracker.hasErrors()) {
         // ...add videos to playlist...
         if (!DEBUG_FLAG_DONT_UPDATE_PLAYLISTS) {
-          addVideosToPlaylist(playlistId, newVideoIds, errorTracker);
+          addVideosToPlaylist(playlistId, filteredVideoIds, errorTracker);
         } else {
           errorTracker.addError("Don't Update Playlists debug flag is set");
         }
@@ -294,6 +301,54 @@ export function updatePlaylists(
 //
 // Functions to obtain channel IDs to check
 //
+
+export function getChannelId(): void {
+  const ui = SpreadsheetApp.getUi();
+
+  const result = ui.prompt(
+    'Get Channel ID',
+    'Please input a channel name:',
+    ui.ButtonSet.OK_CANCEL
+  );
+  const button = result.getSelectedButton();
+  const text = result.getResponseText();
+
+  if (button === ui.Button.OK) {
+    const results: GoogleAppsScript.YouTube.Schema.SearchListResponse =
+      YouTube.Search!.list('id', {
+        q: text,
+        type: 'channel',
+        maxResults: 50,
+      });
+    if (!results || !results.items) {
+      ui.alert(`No results found for ${text}.`);
+      return;
+    }
+
+    for (let i = 0; i < results.items.length; i += 1) {
+      const item = results.items[i];
+      if (!item.id || !item.id.channelId) {
+        continue;
+      }
+      const confirmation = ui.alert(
+        'Please confirm',
+        `Is this the link to the channel you want?\n\nhttps://youtube.com/channel/${item.id.channelId}`,
+        ui.ButtonSet.YES_NO
+      );
+
+      if (confirmation === ui.Button.YES) {
+        ui.alert(`The channel ID is ${item.id.channelId}`);
+        return;
+      }
+      if (confirmation === ui.Button.NO) {
+        continue;
+      }
+      return
+    }
+
+    ui.alert(`No results found for ${text}.`);
+  }
+}
 
 /**
  * Get Channel IDs from Subscriptions (ALL keyword)
@@ -428,13 +483,13 @@ function getVideoIds(
         YouTube.Channels!.list('id', {
           id: channelId,
         });
-      if (!results || !results.items) {
+      if (!results) {
         errorTracker.addError(
           `YouTube channel search returned invalid response for channel with id ${channelId}`
         );
         return [];
       }
-      if (results.items.length === 0) {
+      if (!results.items || results.items.length === 0) {
         errorTracker.addError(`Cannot find channel with id ${channelId}`);
         return [];
       }
@@ -472,13 +527,13 @@ function getVideoIdsWithLessQueries(
       YouTube.Channels!.list('contentDetails', {
         id: channelId,
       });
-    if (!results || !results.items) {
+    if (!results) {
       errorTracker.addError(
         `YouTube channel search returned invalid response for channel with id ${channelId}`
       );
       return [];
     }
-    if (results.items.length === 0) {
+    if (!results.items || results.items.length === 0) {
       errorTracker.addError(`Cannot find channel with id ${channelId}`);
       return [];
     }
@@ -529,9 +584,10 @@ function getVideoIdsWithLessQueries(
         );
       } else {
         Logger.log(
-          `Channel ${channelId} does not have any uploads in ${uploadsPlaylistId}, Failed with error Message: [${
-            e.message
-          }] Details: ${JSON.stringify(e.details)}`
+          `Warning: Channel ${channelId} does not have any uploads in ${uploadsPlaylistId}, ignore if this" +
+          " is intentional as this will not fail the script. API error details for troubleshooting: Details: ${JSON.stringify(
+            e.details
+          )}`
         );
       }
       return [];
@@ -574,7 +630,7 @@ function getPlaylistVideoIds(
       for (let j = 0; j < results.items.length; j += 1) {
         const item: GoogleAppsScript.YouTube.Schema.PlaylistItem =
           results.items[j];
-        if (item.snippet!.publishedAt! > lastTimestamp) {
+        if (new Date(item.snippet!.publishedAt!) > new Date(lastTimestamp)) {
           videoIds.push(item.snippet!.resourceId!.videoId!);
         }
       }
@@ -667,7 +723,19 @@ function addVideosToPlaylist(
       );
       successCount += 1;
     } catch (e: any) {
-      if (e.details.code === 404) {
+      if (e.details.code === 409) {
+        // Duplicate video - log but don't count as error
+        Logger.log(
+          `Couldn't update playlist with video (${videoIds[idx]}), ERROR: Video already exists`
+        );
+      } else if (
+        e.details.code === 400 &&
+        e.details.errors[0].reason === 'playlistOperationUnsupported'
+      ) {
+        errorTracker.addError(
+          "Couldn't update watch later or watch history playlist with video, functionality deprecated; try adding videos to a different playlist"
+        );
+      } else {
         // Check if video is private
         try {
           const results: GoogleAppsScript.YouTube.Schema.VideoListResponse =
@@ -681,40 +749,22 @@ function addVideosToPlaylist(
             );
           } else {
             errorTracker.addError(
-              `Couldn't update playlist with video (${videoIds[idx]}), 404 on update, but found video with API, not sure what to do`
+              `"Couldn't update playlist with video (${
+                videoIds[idx]
+              }), ERROR: Message: [${e.message}] Details: ${JSON.stringify(
+                e.details
+              )}`
             );
           }
         } catch (e2: any) {
           errorTracker.addError(
-            `Couldn't update playlist with video (${
-              videoIds[idx]
-            }), 404 on update (got ${
+            `Couldn't update playlist with video (${videoIds[idx]}), got ${
               e.message
-            }), tried to search for video with id, got ERROR: Message: [${
+            }, tried to search for video with id, got ERROR: Message: [${
               e2.message
             }] Details: ${JSON.stringify(e.details)}`
           );
         }
-      } else if (
-        e.details.code === 400 &&
-        e.details.errors[0].reason === 'playlistOperationUnsupported'
-      ) {
-        errorTracker.addError(
-          "Couldn't update watch later or watch history playlist with video, functionality deprecated; try adding videos to a different playlist"
-        );
-      } else if (e.details.code === 409) {
-        // Duplicate video - log but don't count as error
-        Logger.log(
-          `Couldn't update playlist with video (${videoIds[idx]}), ERROR: Video already exists`
-        );
-      } else {
-        errorTracker.addError(
-          `Couldn't update playlist with video (${
-            videoIds[idx]
-          }), ERROR: Message: [${e.message}] Details: ${JSON.stringify(
-            e.details
-          )}`
-        );
       }
     }
   }
@@ -753,7 +803,10 @@ function deletePlaylistItems(
       for (let j = 0; j < results.items!.length; j += 1) {
         const item: GoogleAppsScript.YouTube.Schema.PlaylistItem =
           results.items![j];
-        if (item.contentDetails!.videoPublishedAt! < deleteBeforeTimestamp) {
+        if (
+          new Date(item.contentDetails!.videoPublishedAt!) <
+          new Date(deleteBeforeTimestamp)
+        ) {
           // this compares the timestamp when the video was published
           Logger.log(`Del: | ${item.contentDetails!.videoPublishedAt}`);
           YouTube.PlaylistItems!.remove(item.id!);
@@ -803,6 +856,60 @@ function deletePlaylistItems(
       }] Details: ${JSON.stringify(e.details)}`
     );
   }
+}
+
+//
+// Functions for filtering videos
+//
+
+// Returns a new filtered array of videos based on the filters selected in the sheet
+function applyFilters(
+  videoIds: string[],
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  iRow: number
+): string[] {
+  const filters: Array<(videoId: string) => boolean> = [];
+
+  // Removes all shorts if enabled
+  if (
+    sheet.getRange(iRow + 1, reservedColumnShortsFilter + 1).getValue() === 'No'
+  ) {
+    Logger.log('Removing shorts');
+    filters.push(removeShortsFilter);
+  }
+
+  return videoIds.filter((videoId) =>
+    filters.every((filter) => filter(videoId))
+  );
+}
+
+// Returns false if video is a short by checking if its length is less than three minutes
+// There might be better/more accurate ways
+function removeShortsFilter(videoId: string): boolean {
+  const response = YouTube.Videos!.list('contentDetails', {
+    id: videoId,
+  });
+
+  const items = response.items;
+  if (!items || items.length === 0) return false;
+
+  const [firstItem] = items;
+  const duration = firstItem.contentDetails?.duration;
+  if (!duration) return false;
+
+  return !isLessThanThreeMinutes(duration);
+}
+
+// Checks if an ISO 8601 duration is less or equal than three minutes.
+// Verifying the duration is of the form PT1M or PTXXX.XXXS where X represents digits.
+function isLessThanThreeMinutes(duration: string): boolean {
+  // Check if duration is 3 minutes
+  // Since there can be a 1 second variation, we check for 3 minutes + 1 second too, due to following bug
+  // https://stackoverflow.com/questions/72459082/yt-api-pulling-different-video-lengths-for-youtube-videos
+  if (duration === 'PT3M' || duration === 'PT3M1S') return true;
+  if (duration.slice(0, 2) !== 'PT') return false;
+  // match one or two groups of this, so e.g. "2M", "59S" or "2M5S"
+  return duration.match('^PT([12]M|[1-5]?[0-9]S){1,2}$') != null;
 }
 
 //

@@ -4,6 +4,7 @@ export function onOpen(): void {
     .addItem('Sheet Editor (MUI)', 'openDialogMUI')
     .addItem('About me', 'openAboutSidebar')
     .addItem('Update Playlists', 'updatePlaylists')
+    .addItem('Get Channel ID', 'getChannelId')
     .addToUi();
 
   const ss: GoogleAppsScript.Spreadsheet.Spreadsheet =
