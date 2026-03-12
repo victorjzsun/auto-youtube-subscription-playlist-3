@@ -23,12 +23,12 @@ const DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND: boolean = bool(false);
 // Reserved Row and Column indices (zero-based)
 // If you use getRange remember those indices are one-based, so add + 1 in that call i.e.
 // sheet.getRange(iRow + 1, reservedColumnTimestamp + 1).setValue(isodate);
-const reservedTableRows: number = 3;          // Start of the range of the PlaylistID+ChannelID data
-const reservedTableColumns: number = 6;       // Start of the range of the ChannelID data (0: A, 1: B, 2: C, 3: D, 4: E, 5: F, ...)
-const reservedColumnPlaylist: number = 0;     // Column containing playlist to add to
-const reservedColumnTimestamp: number = 1;    // Column containing last timestamp
-const reservedColumnFrequency: number = 2;    // Column containing number of hours until new check
-const reservedColumnDeleteDays: number = 3;   // Column containing number of days before today until videos get deleted
+const reservedTableRows: number = 3; // Start of the range of the PlaylistID+ChannelID data
+const reservedTableColumns: number = 6; // Start of the range of the ChannelID data (0: A, 1: B, 2: C, 3: D, 4: E, 5: F, ...)
+const reservedColumnPlaylist: number = 0; // Column containing playlist to add to
+const reservedColumnTimestamp: number = 1; // Column containing last timestamp
+const reservedColumnFrequency: number = 2; // Column containing number of hours until new check
+const reservedColumnDeleteDays: number = 3; // Column containing number of days before today until videos get deleted
 const reservedColumnShortsFilter: number = 4; // Column containing switch for using shorts filter
 
 // Reserved lengths
@@ -39,7 +39,7 @@ const reservedDebugNumColumns: number = 26; // Number of columns to use in debug
  * Extend Date with Iso String with timezone support (Youtube needs IsoDates)
  * https://stackoverflow.com/questions/17415579/how-to-iso-8601-format-a-date-with-timezone-offset-in-javascript
  */
-function toIsoString(date: Date): string {
+function dateToIsoString(date: Date): string {
   const tzo: number = -date.getTimezoneOffset();
   const dif: string = tzo >= 0 ? '+' : '-';
   const pad = (num: number): string => {
@@ -112,18 +112,18 @@ export function updatePlaylists(
     const playlistId: string = data[iRow][reservedColumnPlaylist];
     if (!playlistId) continue;
 
-    let lastTimestamp: string = data[iRow][reservedColumnTimestamp];
-    if (!lastTimestamp) {
-      const date: Date = new Date();
-      date.setHours(date.getHours() - 24); // Subscriptions added starting with the last day
-      const isodate: string = toIsoString(date);
-      sheet.getRange(iRow + 1, reservedColumnTimestamp + 1).setValue(isodate);
-      lastTimestamp = isodate;
+    let lastTimestampStr: string = data[iRow][reservedColumnTimestamp];
+    let lastTimestamp: Date;
+    if (!lastTimestampStr) {
+      lastTimestamp = new Date();
+      lastTimestamp.setHours(lastTimestamp.getHours() - 24); // Subscriptions added starting with the last day
+      sheet.getRange(iRow + 1, reservedColumnTimestamp + 1).setValue(dateToIsoString(lastTimestamp));
+    } else {
+      lastTimestamp = new Date(lastTimestampStr);
     }
 
     // Check if it's time to update already
-    const freqDate: Date = new Date(lastTimestamp);
-    const dateDiff: number = Date.now() - freqDate.getTime();
+    const dateDiff: number = Date.now() - lastTimestamp.getTime();
     const nextTime: number =
       data[iRow][reservedColumnFrequency] * MILLIS_PER_HOUR;
     if (nextTime && dateDiff <= nextTime) {
@@ -241,18 +241,18 @@ export function updatePlaylists(
         /// ...delete old videos in playlist
         const daysBack: number = data[iRow][reservedColumnDeleteDays];
         if (daysBack && daysBack > 0) {
-          const deleteBeforeTimestamp: string = toIsoString(
-            new Date(new Date().getTime() - daysBack * MILLIS_PER_DAY)
+          const deleteBeforeDate: Date = new Date(
+            new Date().getTime() - daysBack * MILLIS_PER_DAY
           );
-          Logger.log(`Delete before: ${deleteBeforeTimestamp}`);
-          deletePlaylistItems(playlistId, deleteBeforeTimestamp, errorTracker);
+          Logger.log(`Delete before: ${dateToIsoString(deleteBeforeDate)}`);
+          deletePlaylistItems(playlistId, deleteBeforeDate, errorTracker);
         }
       }
       // Update timestamp
       if (!errorTracker.hasErrors() && !DEBUG_FLAG_DONT_UPDATE_TIMESTAMP) {
         sheet
           .getRange(iRow + 1, reservedColumnTimestamp + 1)
-          .setValue(toIsoString(new Date()));
+          .setValue(dateToIsoString(new Date()));
       }
     }
     // Prints logs to Debug sheet
@@ -343,7 +343,7 @@ export function getChannelId(): void {
       if (confirmation === ui.Button.NO) {
         continue;
       }
-      return
+      return;
     }
 
     ui.alert(`No results found for ${text}.`);
@@ -510,13 +510,13 @@ function getVideoIds(
  * Get videos from Channels but with less Quota use
  * Slower and date ordering is a bit messy but less quota costs
  * @param channelId - The YouTube channel ID
- * @param lastTimestamp - ISO timestamp to filter videos
+ * @param lastTimestamp - Date object to filter videos
  * @param errorTracker - ErrorTracker instance for logging errors
  * @returns Array of video IDs
  */
 function getVideoIdsWithLessQueries(
   channelId: string,
-  lastTimestamp: string,
+  lastTimestamp: Date,
   errorTracker: ErrorTracker
 ): string[] {
   const videoIds: string[] = [];
@@ -560,7 +560,7 @@ function getVideoIdsWithLessQueries(
       const videosToBeAdded: GoogleAppsScript.YouTube.Schema.PlaylistItem[] =
         results.items!.filter(
           (vid: GoogleAppsScript.YouTube.Schema.PlaylistItem) =>
-            new Date(lastTimestamp) <=
+            lastTimestamp <=
             new Date(vid.contentDetails!.videoPublishedAt!)
         );
       if (videosToBeAdded.length === 0) {
@@ -600,13 +600,13 @@ function getVideoIdsWithLessQueries(
 /**
  * Get Video IDs from Playlist
  * @param playlistId - The YouTube playlist ID
- * @param lastTimestamp - ISO timestamp to filter videos
+ * @param lastTimestamp - Date object to filter videos
  * @param errorTracker - ErrorTracker instance for logging errors
  * @returns Array of video IDs
  */
 function getPlaylistVideoIds(
   playlistId: string,
-  lastTimestamp: string,
+  lastTimestamp: Date,
   errorTracker: ErrorTracker
 ): string[] {
   const videoIds: string[] = [];
@@ -618,7 +618,7 @@ function getPlaylistVideoIds(
           playlistId,
           maxResults: 50,
           order: 'date',
-          publishedAfter: lastTimestamp,
+          publishedAfter: dateToIsoString(lastTimestamp),
           pageToken: nextPageToken,
         });
       if (!results || !results.items) {
@@ -630,7 +630,7 @@ function getPlaylistVideoIds(
       for (let j = 0; j < results.items.length; j += 1) {
         const item: GoogleAppsScript.YouTube.Schema.PlaylistItem =
           results.items[j];
-        if (new Date(item.snippet!.publishedAt!) > new Date(lastTimestamp)) {
+        if (new Date(item.snippet!.publishedAt!) > lastTimestamp) {
           videoIds.push(item.snippet!.resourceId!.videoId!);
         }
       }
@@ -779,12 +779,12 @@ function addVideosToPlaylist(
 /**
  * Delete Videos from Playlist if they're older than the defined time
  * @param playlistId - Playlist to clean up
- * @param deleteBeforeTimestamp - ISO timestamp - videos older than this are deleted
+ * @param deleteBeforeTimestamp - Date object - videos older than this are deleted
  * @param errorTracker - ErrorTracker instance for logging errors
  */
 function deletePlaylistItems(
   playlistId: string,
-  deleteBeforeTimestamp: string,
+  deleteBeforeTimestamp: Date,
   errorTracker: ErrorTracker
 ): void {
   let nextPageToken: string | undefined = '';
@@ -796,7 +796,7 @@ function deletePlaylistItems(
           playlistId,
           maxResults: 50,
           order: 'date',
-          publishedBefore: deleteBeforeTimestamp, // this compares the timestamp when the video was added to playlist
+          publishedBefore: dateToIsoString(deleteBeforeTimestamp), // this compares the timestamp when the video was added to playlist
           pageToken: nextPageToken,
         });
 
@@ -805,7 +805,7 @@ function deletePlaylistItems(
           results.items![j];
         if (
           new Date(item.contentDetails!.videoPublishedAt!) <
-          new Date(deleteBeforeTimestamp)
+          deleteBeforeTimestamp
         ) {
           // this compares the timestamp when the video was published
           Logger.log(`Del: | ${item.contentDetails!.videoPublishedAt}`);
