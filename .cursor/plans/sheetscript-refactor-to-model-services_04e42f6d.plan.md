@@ -7,7 +7,7 @@ todos:
     status: pending
   - id: implement-sheet-and-youtube-services
     content: Create SheetConfigService, SubscriptionsVideoService, UserVideoService (as decorators over ChannelVideoService), ChannelVideoService, PlaylistVideoService, PlaylistUpdateService, and DebugLogService encapsulating current API interactions without changing behavior.
-    status: pending
+    status: completed
   - id: refactor-main-flow-into-stages
     content: "Restructure updatePlaylists into clear stages using the new models and services: build configurations, compute changes, apply changes, and persist state."
     status: pending
@@ -117,7 +117,7 @@ graph TB
 
 ## Tasks
 
-### Task 1: Introduce Domain Model Classes
+### Task 1: Introduce Domain Model Classes (Completed)
 
 - **1.1 Define playlist configuration model**
   - Create a `PlaylistConfiguration` class representing the data for a single playlist row (one entry in the main sheet):
