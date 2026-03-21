@@ -37,12 +37,19 @@ export type VideoSource =
   | SubscriptionSource
   | PlaylistSource;
 
+export interface VideoFilters {
+  excludeShorts?: boolean;
+}
+
 export interface PlaylistConfiguration {
+  id: string;
+  name: string;
   playlistId: string;
   lastTimestamp: Date;
   frequencyHours: number | null;
   deleteDays: number | null;
   sources: VideoSource[];
+  filters: VideoFilters;
 }
 
 export interface Video {

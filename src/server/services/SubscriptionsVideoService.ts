@@ -53,7 +53,7 @@ export default class SubscriptionsVideoService implements VideoFetchService {
   }
 
   private getAllChannelIds(errorTracker: ErrorTracker): string[] {
-    let AboResponse: GoogleAppsScript.YouTube.Schema.SubscriptionListResponse;
+    let result: GoogleAppsScript.YouTube.Schema.SubscriptionListResponse;
     const AboList: [string[], string[]] = [[], []];
     // TODO: Replace with nextPageToken provided in response
     // Workaround: nextPageToken API-Bug (these Tokens are limited to 1000 Subscriptions... but you can add more Tokens.)
@@ -83,21 +83,28 @@ export default class SubscriptionsVideoService implements VideoFetchService {
     let nptPage: number = 0;
     try {
       do {
-        AboResponse = YouTube.Subscriptions!.list('snippet', {
+        result = YouTube.Subscriptions!.list('snippet', {
           mine: true,
           maxResults: 50,
           order: 'alphabetical',
           pageToken: nextPageToken[nptPage],
           fields: 'items(snippet(title,resourceId(channelId)))',
         });
-        for (let i = 0, ix = AboResponse.items!.length; i < ix; i += 1) {
-          AboList[0].push(AboResponse.items![i].snippet!.title!);
-          AboList[1].push(
-            AboResponse.items![i].snippet!.resourceId!.channelId!
+        if (!result || !result.items) {
+          errorTracker.addError(
+            `YouTube subscription search returned invalid response`
           );
+          break;
+        }
+        for (let i = 0, ix = result.items.length; i < ix; i += 1) {
+          const item = result.items[i];
+          if (item.snippet?.title && item.snippet.resourceId?.channelId) {
+            AboList[0].push(item.snippet.title);
+            AboList[1].push(item.snippet.resourceId.channelId);
+          }
         }
         nptPage += 1;
-      } while (AboResponse.items!.length > 0 && nptPage < 20);
+      } while (result.items.length > 0 && nptPage < 20);
       if (AboList[0].length !== AboList[1].length) {
         errorTracker.addError(
           `While getting subscriptions, the number of titles (${AboList[0].length}) did not match the number of channels (${AboList[1].length}).`

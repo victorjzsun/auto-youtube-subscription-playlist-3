@@ -7,7 +7,6 @@
  * https://docs.google.com/spreadsheets/d/1sZ9U52iuws6ijWPQTmQkXvaZSV3dZ3W9JzhnhNTX9GU/copy
  */
 
-import { onOpen } from './ui';
 import ErrorTracker from './ErrorTracker';
 import { PlaylistChangeSet, Video } from './models';
 import dateToIsoString from './services/dateUtils';
@@ -15,11 +14,8 @@ import {
   DEBUG_FLAG_DONT_UPDATE_PLAYLISTS,
   DEBUG_FLAG_DONT_UPDATE_TIMESTAMP,
   DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND,
-  reservedColumnShortsFilter,
   reservedTableRows,
   reservedColumnPlaylist,
-  reservedDebugNumRows,
-  reservedDebugNumColumns,
 } from './services/constants';
 import SheetConfigService from './services/SheetConfigService';
 import ChannelVideoService from './services/ChannelVideoService';
@@ -28,41 +24,20 @@ import UserVideoService from './services/UserVideoService';
 import PlaylistVideoService from './services/PlaylistVideoService';
 import PlaylistUpdateService from './services/PlaylistUpdateService';
 import DebugLogService from './services/DebugLogService';
+import VideoFilterService from './services/VideoFilterService';
 
 /**
  * Main Function to update all Playlists
  * @param sheetParam - Optional sheet parameter, defaults to first sheet
  */
-export function updatePlaylists(
-  sheetFromCaller?: GoogleAppsScript.Spreadsheet.Sheet
-): void {
+export function updatePlaylists(): void {
   const errorTracker = new ErrorTracker();
 
-  let sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined = sheetFromCaller;
-  let sheetID: string | null =
-    PropertiesService.getScriptProperties().getProperty('sheetID');
-  if (!sheetID) onOpen();
-  sheetID = PropertiesService.getScriptProperties().getProperty('sheetID');
-  if (!sheetID) throw new Error('Sheet ID not found in script properties');
-
-  const spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet =
-    SpreadsheetApp.openById(sheetID);
-  if (!sheet || !sheet.toString || sheet.toString() !== 'Sheet') {
-    sheet = spreadsheet.getSheets()[0];
-  }
-  if (!sheet || sheet.getRange('A3').getValue() !== 'Playlist ID') {
-    const additional: string = sheet
-      ? `, instead found sheet with name ${sheet.getName()}`
-      : '';
-    throw new Error(
-      `Cannot find playlist sheet, make sure the sheet with playlist IDs and channels is the first sheet (leftmost)${additional}`
-    );
-  }
+  const { service: sheetConfigService, spreadsheet } =
+    SheetConfigService.initialize();
 
   const MILLIS_PER_HOUR: number = 1000 * 60 * 60;
   const MILLIS_PER_DAY: number = MILLIS_PER_HOUR * 24;
-
-  const sheetConfigService = new SheetConfigService(sheet);
   const channelVideoService = new ChannelVideoService();
   const subscriptionsVideoService = new SubscriptionsVideoService(
     channelVideoService
@@ -71,34 +46,20 @@ export function updatePlaylists(
   const playlistVideoService = new PlaylistVideoService();
   const playlistUpdateService = new PlaylistUpdateService();
   const debugLogService = new DebugLogService();
+  const videoFilterService = new VideoFilterService();
 
-  const configsWithRows = sheetConfigService.getAllPlaylistConfigurations();
+  const configs = sheetConfigService.getAllPlaylistConfigurations();
 
-  let debugSheet: GoogleAppsScript.Spreadsheet.Sheet | null =
-    spreadsheet.getSheetByName('DebugData');
-  if (!debugSheet) {
-    debugSheet = spreadsheet.insertSheet('DebugData').hideSheet();
-  }
-  const nextDebugCol: number = debugLogService.getNextDebugCol(debugSheet);
-  let nextDebugRow: number = debugLogService.getNextDebugRow(
-    debugSheet,
-    nextDebugCol
-  );
-  const debugViewerSheet: GoogleAppsScript.Spreadsheet.Sheet | null =
-    spreadsheet.getSheetByName('Debug');
-  if (debugViewerSheet) {
-    debugLogService.initDebugEntry(
-      debugViewerSheet,
-      nextDebugCol,
-      nextDebugRow
-    );
-  } else {
+  const debugViewerSheetExists: boolean =
+    debugLogService.initializeWithSpreadsheet(spreadsheet);
+
+  if (!debugViewerSheetExists) {
     Logger.log('Debug viewer sheet not found');
   }
 
-  configsWithRows.forEach(({ config, rowIndex }) => {
+  configs.forEach((config) => {
     Logger.clear();
-    Logger.log(`Row: ${rowIndex + 1}`);
+    Logger.log(`Updating config with name ${config.name}`);
 
     const dateDiff: number = Date.now() - config.lastTimestamp.getTime();
     const nextTime: number = (config.frequencyHours ?? 0) * MILLIS_PER_HOUR;
@@ -160,7 +121,10 @@ export function updatePlaylists(
     Logger.log(`Acquired ${videosToAdd.length} videos`);
 
     // TODO: Add filter service
-    const filteredVideos: Video[] = applyFilters(videosToAdd, sheet, rowIndex);
+    const filteredVideos: Video[] = videoFilterService.filterVideos(
+      videosToAdd,
+      config.filters
+    );
 
     Logger.log(`Filtering finished, left with ${filteredVideos.length} videos`);
 
@@ -195,45 +159,23 @@ export function updatePlaylists(
     }
 
     if (!errorTracker.hasErrors() && !DEBUG_FLAG_DONT_UPDATE_TIMESTAMP) {
-      sheetConfigService.updateLastTimestamp(rowIndex, new Date());
+      sheetConfigService.updateLastTimestamp(config.id, new Date());
     }
 
-    // TODO: Add to debug service
     const newLogs: string[][] = Logger.getLog()
       .split('\n')
       .slice(0, -1)
       .map((log: string) => log.split(' INFO: '));
-    if (newLogs.length > 0) {
-      debugSheet
-        .getRange(nextDebugRow + 1, nextDebugCol + 1, newLogs.length, 2)
-        .setValues(newLogs);
-    }
-    nextDebugRow += newLogs.length;
+    debugLogService.appendLogs(newLogs);
+
     errorTracker.resetForNextPlaylist();
   });
 
   // Log finished script, only populate second column to signify end of execution when retrieving logs
-  if (errorTracker.getTotalErrorCount() === 0) {
-    debugSheet
-      .getRange(nextDebugRow + 1, nextDebugCol + 2)
-      .setValue('Updated all rows, script successfully finished');
-  } else {
-    debugSheet
-      .getRange(nextDebugRow + 1, nextDebugCol + 2)
-      .setValue('Script did not successfully finish');
-  }
-  nextDebugRow += 1;
+  debugLogService.setCompletionMessage(errorTracker.getTotalErrorCount());
+  debugLogService.cycleDebugColIfNeeded();
+  debugLogService.loadLastDebugLog();
 
-  if (nextDebugRow > reservedDebugNumRows - 1) {
-    let colIndex: number = 0;
-    if (nextDebugCol < reservedDebugNumColumns - 2) {
-      colIndex = nextDebugCol + 2;
-    }
-    debugLogService.clearDebugCol(debugSheet, colIndex);
-  }
-  if (debugViewerSheet) {
-    debugLogService.loadLastDebugLog(debugViewerSheet);
-  }
   if (errorTracker.getTotalErrorCount() > 0) {
     throw new Error(
       `${errorTracker.getTotalErrorCount()} video(s) were not added to playlists correctly, please check Debug sheet. Timestamps for respective rows has not been updated.`
@@ -293,54 +235,6 @@ export function getChannelId(): void {
   }
 }
 
-// Returns a new filtered array of videos based on the filters selected in the sheet
-function applyFilters(
-  videos: Video[],
-  sheet: GoogleAppsScript.Spreadsheet.Sheet,
-  iRow: number
-): Video[] {
-  const filters: Array<(videoId: string) => boolean> = [];
-
-  // Removes all shorts if enabled
-  if (
-    sheet.getRange(iRow + 1, reservedColumnShortsFilter + 1).getValue() === 'No'
-  ) {
-    Logger.log('Removing shorts');
-    filters.push(removeShortsFilter);
-  }
-
-  return videos.filter((video) => filters.every((filter) => filter(video.id)));
-}
-
-// Returns false if video is a short by checking if its length is less than three minutes
-// There might be better/more accurate ways
-function removeShortsFilter(videoId: string): boolean {
-  const response = YouTube.Videos!.list('contentDetails', {
-    id: videoId,
-  });
-
-  const items = response.items;
-  if (!items || items.length === 0) return false;
-
-  const [firstItem] = items;
-  const duration = firstItem.contentDetails?.duration;
-  if (!duration) return false;
-
-  return !isLessThanThreeMinutes(duration);
-}
-
-// Checks if an ISO 8601 duration is less or equal than three minutes.
-// Verifying the duration is of the form PT1M or PTXXX.XXXS where X represents digits.
-function isLessThanThreeMinutes(duration: string): boolean {
-  // Check if duration is 3 minutes
-  // Since there can be a 1 second variation, we check for 3 minutes + 1 second too, due to following bug
-  // https://stackoverflow.com/questions/72459082/yt-api-pulling-different-video-lengths-for-youtube-videos
-  if (duration === 'PT3M' || duration === 'PT3M1S') return true;
-  if (duration.slice(0, 2) !== 'PT') return false;
-  // match one or two groups of this, so e.g. "2M", "59S" or "2M5S"
-  return duration.match('^PT([12]M|[1-5]?[0-9]S){1,2}$') != null;
-}
-
 /**
  * Given an execution's (first log's) timestamp, return an array with the execution's logs
  * @param timestamp - ISO timestamp of the execution
@@ -394,17 +288,7 @@ export function doGet(e: DoGetEvent): GoogleAppsScript.HTML.HtmlOutput {
   if (!sheetID) throw new Error('Sheet ID not found in script properties');
 
   if (e.parameter.update === 'True') {
-    const sheet: GoogleAppsScript.Spreadsheet.Sheet =
-      SpreadsheetApp.openById(sheetID).getSheets()[0];
-    if (!sheet || sheet.getRange('A3').getValue() !== 'Playlist ID') {
-      const additional: string = sheet
-        ? `, instead found sheet with name ${sheet.getName()}`
-        : '';
-      throw new Error(
-        `Cannot find playlist sheet, make sure the sheet with playlist IDs and channels is the first sheet (leftmost)${additional}`
-      );
-    }
-    updatePlaylists(sheet);
+    updatePlaylists();
   }
 
   const t: GoogleAppsScript.HTML.HtmlTemplate =

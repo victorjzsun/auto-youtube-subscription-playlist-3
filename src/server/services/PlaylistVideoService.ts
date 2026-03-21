@@ -38,8 +38,13 @@ export default class PlaylistVideoService implements VideoFetchService {
         for (let j = 0; j < results.items.length; j += 1) {
           const item: GoogleAppsScript.YouTube.Schema.PlaylistItem =
             results.items[j];
-          if (new Date(item.snippet!.publishedAt!) > lastTimestamp) {
-            videoIds.push(item.snippet!.resourceId!.videoId!);
+          if (item.snippet && item.snippet.publishedAt) {
+            const publishedAt = new Date(item.snippet.publishedAt);
+            if (publishedAt > lastTimestamp) {
+              if (item.snippet.resourceId?.videoId) {
+                videoIds.push(item.snippet.resourceId.videoId);
+              }
+            }
           }
         }
         nextPageToken = results.nextPageToken;

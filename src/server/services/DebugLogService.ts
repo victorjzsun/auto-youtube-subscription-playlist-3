@@ -5,7 +5,118 @@ import { reservedDebugNumColumns, reservedDebugNumRows } from './constants';
  * TODO: make more efficient and abstract away spreadsheet functions
  */
 export default class DebugLogService {
-  getNextDebugCol(debugSheet: GoogleAppsScript.Spreadsheet.Sheet): number {
+  private debugSheet: GoogleAppsScript.Spreadsheet.Sheet | null = null;
+
+  private debugViewerSheet: GoogleAppsScript.Spreadsheet.Sheet | null = null;
+
+  private nextDebugCol: number = 0;
+
+  private nextDebugRow: number = 0;
+
+  /**
+   * Initialize the debug service by retrieving/creating debug sheets from a spreadsheet
+   * @param spreadsheet - The spreadsheet to retrieve/create debug sheets from
+   * @returns Whether the Debug viewer sheet exists
+   */
+  initializeWithSpreadsheet(
+    spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet
+  ): boolean {
+    // Get or create the DebugData sheet
+    let debugSheet: GoogleAppsScript.Spreadsheet.Sheet | null =
+      spreadsheet.getSheetByName('DebugData');
+    if (!debugSheet) {
+      debugSheet = spreadsheet.insertSheet('DebugData').hideSheet();
+    }
+
+    // Get the Debug viewer sheet (optional)
+    this.debugViewerSheet = spreadsheet.getSheetByName('Debug');
+
+    this.initialize(debugSheet, this.debugViewerSheet);
+    return this.debugViewerSheet !== null;
+  }
+
+  /**
+   * Initialize the debug service with the DebugData sheet and optional Debug viewer sheet
+   * @param sheet - The DebugData sheet
+   * @param debugViewerSheet - Optional Debug viewer sheet for displaying logs
+   */
+  initialize(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    debugViewerSheet?: GoogleAppsScript.Spreadsheet.Sheet | null
+  ): void {
+    this.debugSheet = sheet;
+    this.debugViewerSheet = debugViewerSheet || null;
+    this.nextDebugCol = this.getNextDebugCol(sheet);
+    this.nextDebugRow = this.getNextDebugRow(sheet, this.nextDebugCol);
+
+    if (this.debugViewerSheet) {
+      this.initDebugEntry(
+        this.debugViewerSheet,
+        this.nextDebugCol,
+        this.nextDebugRow
+      );
+    }
+  }
+
+  /**
+   * Append logs to the DebugData sheet
+   * @param logs - Array of log arrays to append
+   */
+  appendLogs(logs: string[][]): void {
+    if (!this.debugSheet) {
+      throw new Error('DebugLogService not initialized');
+    }
+    if (logs.length > 0) {
+      this.debugSheet
+        .getRange(this.nextDebugRow + 1, this.nextDebugCol + 1, logs.length, 2)
+        .setValues(logs);
+      this.nextDebugRow += logs.length;
+    }
+  }
+
+  /**
+   * Set the completion message in the DebugData sheet
+   * @param errorCount - Total error count from the execution
+   */
+  setCompletionMessage(errorCount: number): void {
+    if (!this.debugSheet) {
+      throw new Error('DebugLogService not initialized');
+    }
+    const message =
+      errorCount === 0
+        ? 'Updated all rows, script successfully finished'
+        : 'Script did not successfully finish';
+
+    this.debugSheet
+      .getRange(this.nextDebugRow + 1, this.nextDebugCol + 2)
+      .setValue(message);
+    this.nextDebugRow += 1;
+  }
+
+  /**
+   * Check if debug column needs to be cycled and perform cleanup if necessary
+   */
+  cycleDebugColIfNeeded(): void {
+    if (!this.debugSheet) {
+      throw new Error('DebugLogService not initialized');
+    }
+    if (this.nextDebugRow > reservedDebugNumRows - 1) {
+      let colIndex: number = 0;
+      if (this.nextDebugCol < reservedDebugNumColumns - 2) {
+        colIndex = this.nextDebugCol + 2;
+      }
+      this.clearDebugCol(this.debugSheet, colIndex);
+    }
+  }
+
+  /**
+   * Get the next available debug column
+   * @param debugSheet - The DebugData sheet
+   * @returns The next debug column index
+   */
+  private getNextDebugCol(
+    debugSheet: GoogleAppsScript.Spreadsheet.Sheet
+  ): number {
     const data: string[][] = debugSheet.getDataRange().getValues();
     // Only one column, not filled yet, return this column
     if (data.length < reservedDebugNumRows) return 0;
@@ -21,7 +132,13 @@ export default class DebugLogService {
     return 0;
   }
 
-  getNextDebugRow(
+  /**
+   * Get the next available debug row for the given column
+   * @param debugSheet - The DebugData sheet
+   * @param nextDebugCol - The debug column index
+   * @returns The next debug row index
+   */
+  private getNextDebugRow(
     debugSheet: GoogleAppsScript.Spreadsheet.Sheet,
     nextDebugCol: number
   ): number {
@@ -58,7 +175,13 @@ export default class DebugLogService {
     }
   }
 
-  initDebugEntry(
+  /**
+   * Initialize a new debug entry in the Debug viewer sheet
+   * @param debugViewer - The Debug viewer sheet
+   * @param nextDebugCol - The debug column index
+   * @param nextDebugRow - The debug row index
+   */
+  private initDebugEntry(
     debugViewer: GoogleAppsScript.Spreadsheet.Sheet,
     nextDebugCol: number,
     nextDebugRow: number
@@ -93,7 +216,12 @@ export default class DebugLogService {
       );
   }
 
-  loadLastDebugLog(debugViewer: GoogleAppsScript.Spreadsheet.Sheet): void {
-    debugViewer.getRange('B3').setValue(debugViewer.getRange('A3').getValue());
+  loadLastDebugLog(): void {
+    if (!this.debugViewerSheet) {
+      return;
+    }
+    this.debugViewerSheet
+      .getRange('B3')
+      .setValue(this.debugViewerSheet.getRange('A3').getValue());
   }
 }

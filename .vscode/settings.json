@@ -9,5 +9,8 @@
       "url": "http://json.schemastore.org/clasp"
     }
   ],
-  "files.autoSave": "afterDelay"
+  "files.autoSave": "afterDelay",
+  "chat.tools.terminal.autoApprove": {
+    "npm test": true
+  }
 }

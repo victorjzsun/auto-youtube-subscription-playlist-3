@@ -65,7 +65,7 @@ export default class PlaylistUpdateService {
               YouTube.Videos!.list('snippet', {
                 id: videos[idx].id,
               });
-            if (results.items!.length === 0) {
+            if (results.items?.length === 0) {
               // Private video - log but don't count as error
               Logger.log(
                 `Couldn't update playlist with video (${videos[idx].id}), ERROR: Cannot find video, most likely private`

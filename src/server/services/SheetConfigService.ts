@@ -2,12 +2,14 @@ import {
   reservedColumnDeleteDays,
   reservedColumnFrequency,
   reservedColumnPlaylist,
+  reservedColumnShortsFilter,
   reservedColumnTimestamp,
   reservedTableColumns,
   reservedTableRows,
 } from './constants';
 import { PlaylistConfiguration, VideoSource } from '../models';
 import dateToIsoString from './dateUtils';
+import { onOpen } from '../ui';
 
 /**
  * Service responsible for reading and writing playlist configurations to the sheet.
@@ -16,21 +18,52 @@ import dateToIsoString from './dateUtils';
 export default class SheetConfigService {
   private readonly sheet: GoogleAppsScript.Spreadsheet.Sheet;
 
-  constructor(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
+  private readonly idToRow: Map<string, number> = new Map();
+
+  private constructor(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
     this.sheet = sheet;
+  }
+
+  /**
+   * Initialize the SheetConfigService by retrieving and validating the playlist sheet
+   * @param sheetFromCaller - Optional sheet parameter, defaults to first sheet
+   * @returns An object containing the SheetConfigService instance and the spreadsheet
+   */
+  static initialize(sheetFromCaller?: GoogleAppsScript.Spreadsheet.Sheet): {
+    service: SheetConfigService;
+    spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet;
+  } {
+    let sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined = sheetFromCaller;
+    let sheetID: string | null =
+      PropertiesService.getScriptProperties().getProperty('sheetID');
+    if (!sheetID) onOpen();
+    sheetID = PropertiesService.getScriptProperties().getProperty('sheetID');
+    if (!sheetID) throw new Error('Sheet ID not found in script properties');
+
+    const spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet =
+      SpreadsheetApp.openById(sheetID);
+    if (!sheet || !sheet.toString || sheet.toString() !== 'Sheet') {
+      sheet = spreadsheet.getSheets()[0];
+    }
+    if (!sheet || sheet.getRange('A3').getValue() !== 'Playlist ID') {
+      const additional: string = sheet
+        ? `, instead found sheet with name ${sheet.getName()}`
+        : '';
+      throw new Error(
+        `Cannot find playlist sheet, make sure the sheet with playlist IDs and channels is the first sheet (leftmost)${additional}`
+      );
+    }
+
+    return { service: new SheetConfigService(sheet), spreadsheet };
   }
 
   /**
    * Read all playlist configurations from the sheet.
    * Rows without a playlist ID are skipped.
    */
-  getAllPlaylistConfigurations(): Array<{
-    config: PlaylistConfiguration;
-    rowIndex: number;
-  }> {
+  getAllPlaylistConfigurations(): PlaylistConfiguration[] {
     const data: any[][] = this.sheet.getDataRange().getValues();
-    const configs: Array<{ config: PlaylistConfiguration; rowIndex: number }> =
-      [];
+    const configs: PlaylistConfiguration[] = [];
 
     for (
       let iRow: number = reservedTableRows;
@@ -52,7 +85,10 @@ export default class SheetConfigService {
         lastTimestamp = new Date(lastTimestampStr);
       }
 
+      const id = `config-${iRow}`;
       const config: PlaylistConfiguration = {
+        id,
+        name: id,
         playlistId,
         lastTimestamp,
         frequencyHours:
@@ -66,19 +102,26 @@ export default class SheetConfigService {
             ? null
             : Number(data[iRow][reservedColumnDeleteDays]),
         sources: this.parseVideoSourcesFromRow(data[iRow]),
+        filters: {
+          excludeShorts: data[iRow][reservedColumnShortsFilter] === 'No',
+        },
       };
 
-      configs.push({ config, rowIndex: iRow });
+      this.idToRow.set(id, iRow);
+      configs.push(config);
     }
 
     return configs;
   }
 
   /**
-   * Update the last timestamp for a given row.
-   * TODO: Do we need to passing timestamp?
+   * Update the last timestamp for a given config id.
    */
-  updateLastTimestamp(rowIndex: number, timestamp: Date): void {
+  updateLastTimestamp(id: string, timestamp: Date): void {
+    const rowIndex = this.idToRow.get(id);
+    if (rowIndex === undefined) {
+      throw new Error(`Config id ${id} not found`);
+    }
     this.sheet
       .getRange(rowIndex + 1, reservedColumnTimestamp + 1)
       .setValue(timestamp.toISOString());
