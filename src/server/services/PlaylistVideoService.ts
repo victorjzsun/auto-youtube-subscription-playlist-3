@@ -17,14 +17,41 @@ export default class PlaylistVideoService implements VideoFetchService {
       throw new Error(`PlaylistVideoService can only handle playlist sources`);
     }
 
-    // TODO break into smaller methods
+    const playlistId = source.playlistId;
+
+    const videoIds = this.fetchPlaylistVideoIds(
+      playlistId,
+      lastTimestamp,
+      errorTracker
+    );
+
+    if (videoIds.length === 0) {
+      this.ensurePlaylistExists(playlistId, errorTracker);
+      if (DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND) {
+        Logger.log(`Playlist with id ${playlistId} has no new videos`);
+      }
+    }
+
+    return videoIds.map((id) => ({ id, origin: 'playlist' }));
+  }
+
+  /**
+   * Fetches video IDs from a playlist using pagination.
+   * Collects all videos published after the given timestamp.
+   */
+  private fetchPlaylistVideoIds(
+    playlistId: string,
+    lastTimestamp: Date,
+    errorTracker: ErrorTracker
+  ): string[] {
     const videoIds: string[] = [];
     let nextPageToken: string | undefined = '';
+
     while (nextPageToken != null) {
       try {
         const results: GoogleAppsScript.YouTube.Schema.PlaylistItemListResponse =
           YouTube.PlaylistItems!.list('snippet', {
-            playlistId: source.playlistId,
+            playlistId,
             maxResults: 50,
             order: 'date',
             publishedAfter: dateToIsoString(lastTimestamp),
@@ -32,7 +59,7 @@ export default class PlaylistVideoService implements VideoFetchService {
           });
         if (!results || !results.items) {
           errorTracker.addError(
-            `YouTube playlist search returned invalid response for playlist with id ${source.playlistId}`
+            `YouTube playlist search returned invalid response for playlist with id ${playlistId}`
           );
           return [];
         }
@@ -51,50 +78,45 @@ export default class PlaylistVideoService implements VideoFetchService {
         nextPageToken = results.nextPageToken;
       } catch (e: any) {
         Logger.log(
-          `Cannot search YouTube with playlist id ${
-            source.playlistId
-          }, ERROR: Message: [${e.message}] Details: ${JSON.stringify(
-            e.details
-          )}`
+          `Cannot search YouTube with playlist id ${playlistId}, ERROR: Message: [${
+            e.message
+          }] Details: ${JSON.stringify(e.details)}`
         );
         break;
       }
     }
 
-    if (videoIds.length === 0) {
-      try {
-        const results: GoogleAppsScript.YouTube.Schema.PlaylistListResponse =
-          YouTube.Playlists!.list('id', {
-            id: source.playlistId,
-          });
-        if (!results || !results.items) {
-          errorTracker.addError(
-            `YouTube channel search returned invalid response for playlist with id ${source.playlistId}`
-          );
-          return [];
-        }
-        if (results.items.length === 0) {
-          errorTracker.addError(
-            `Cannot find playlist with id ${source.playlistId}`
-          );
-          return [];
-        }
-      } catch (e: any) {
+    return videoIds;
+  }
+
+  /**
+   * Validates that a playlist exists on YouTube.
+   * Called when no new videos are found to provide better error messaging.
+   */
+  private ensurePlaylistExists(
+    playlistId: string,
+    errorTracker: ErrorTracker
+  ): void {
+    try {
+      const results: GoogleAppsScript.YouTube.Schema.PlaylistListResponse =
+        YouTube.Playlists!.list('id', {
+          id: playlistId,
+        });
+      if (!results || !results.items) {
         errorTracker.addError(
-          `Cannot lookup playlist with id ${
-            source.playlistId
-          } on YouTube, ERROR: Message: [${
-            e.message
-          }] Details: ${JSON.stringify(e.details)}`
+          `YouTube channel search returned invalid response for playlist with id ${playlistId}`
         );
-        return [];
+        return;
       }
+      if (results.items.length === 0) {
+        errorTracker.addError(`Cannot find playlist with id ${playlistId}`);
+      }
+    } catch (e: any) {
+      errorTracker.addError(
+        `Cannot lookup playlist with id ${playlistId} on YouTube, ERROR: Message: [${
+          e.message
+        }] Details: ${JSON.stringify(e.details)}`
+      );
     }
-
-    if (videoIds.length === 0 && DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND) {
-      Logger.log(`Playlist with id ${source.playlistId} has no new videos`);
-    }
-
-    return videoIds.map((id) => ({ id, origin: 'playlist' }));
   }
 }

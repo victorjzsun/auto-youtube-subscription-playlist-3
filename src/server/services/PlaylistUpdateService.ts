@@ -155,15 +155,14 @@ export default class PlaylistUpdateService {
 
     // Delete duplicates by videoId
     try {
-      const tempVideos: PlaylistItem[] = [];
+      const seenVideoIds = new Set<string>();
       const duplicateVideos: PlaylistItem[] = [];
 
-      // TODO: Make more efficient
       allVideos.forEach((x: PlaylistItem) => {
-        if (tempVideos.find((y: PlaylistItem) => y.videoId === x.videoId)) {
+        if (seenVideoIds.has(x.videoId)) {
           duplicateVideos.push(x);
         } else {
-          tempVideos.push(x);
+          seenVideoIds.add(x.videoId);
         }
       });
 

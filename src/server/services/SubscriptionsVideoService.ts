@@ -55,39 +55,14 @@ export default class SubscriptionsVideoService implements VideoFetchService {
   private getAllChannelIds(errorTracker: ErrorTracker): string[] {
     let result: GoogleAppsScript.YouTube.Schema.SubscriptionListResponse;
     const AboList: [string[], string[]] = [[], []];
-    // TODO: Replace with nextPageToken provided in response
-    // Workaround: nextPageToken API-Bug (these Tokens are limited to 1000 Subscriptions... but you can add more Tokens.)
-    // From https://gist.github.com/pulsar256/f5621e85ef50711adc6f
-    const nextPageToken: string[] = [
-      '',
-      'CDIQAA',
-      'CGQQAA',
-      'CJYBEAA',
-      'CMgBEAA',
-      'CPoBEAA',
-      'CKwCEAA',
-      'CN4CEAA',
-      'CJADEAA',
-      'CMIDEAA',
-      'CPQDEAA',
-      'CKYEEAA',
-      'CNgEEAA',
-      'CIoFEAA',
-      'CLwFEAA',
-      'CO4FEAA',
-      'CKAGEAA',
-      'CNIGEAA',
-      'CIQHEAA',
-      'CLYHEAA',
-    ];
-    let nptPage: number = 0;
+    let pageToken: string | undefined = '';
     try {
       do {
         result = YouTube.Subscriptions!.list('snippet', {
           mine: true,
           maxResults: 50,
           order: 'alphabetical',
-          pageToken: nextPageToken[nptPage],
+          pageToken,
           fields: 'items(snippet(title,resourceId(channelId)))',
         });
         if (!result || !result.items) {
@@ -103,8 +78,8 @@ export default class SubscriptionsVideoService implements VideoFetchService {
             AboList[1].push(item.snippet.resourceId.channelId);
           }
         }
-        nptPage += 1;
-      } while (result.items.length > 0 && nptPage < 20);
+        pageToken = result.nextPageToken;
+      } while (pageToken);
       if (AboList[0].length !== AboList[1].length) {
         errorTracker.addError(
           `While getting subscriptions, the number of titles (${AboList[0].length}) did not match the number of channels (${AboList[1].length}).`

@@ -40,23 +40,23 @@ This implementation plan documents the TODOs currently present in the codebase a
 - [ ] Remove the `// TODO: Make more efficient` comment.
 
 ## 6. `src/server/services/PlaylistVideoService.ts`
-- [ ] Break the large `getVideos()` method into smaller helper methods.
+- [x] Break the large `getVideos()` method into smaller helper methods.
   - Extract playlist item pagination and ID collection into one helper method, e.g. `fetchPlaylistVideoIds()`.
   - Extract playlist existence validation into a separate helper method, e.g. `ensurePlaylistExists()`.
   - Keep the public `getVideos()` method responsible only for orchestration and error handling.
-- [ ] Remove the `// TODO break into smaller methods` comment.
+- [x] Remove the `// TODO break into smaller methods` comment.
 
 ## 7. `src/server/services/SubscriptionsVideoService.ts`
-- [ ] Replace the hard-coded `nextPageToken` array with correct YouTube API pagination using `result.nextPageToken`.
+- [x] Replace the hard-coded `nextPageToken` array with correct YouTube API pagination using `result.nextPageToken`.
   - Use the response `nextPageToken` field to page through subscription results until no more pages remain.
   - Preserve same field selection and error handling behavior.
-- [ ] Remove the `// TODO: Replace with nextPageToken provided in response` comment.
+- [x] Remove the `// TODO: Replace with nextPageToken provided in response` comment.
 
 ## 8. `src/server/services/UserVideoService.ts`
-- [ ] Extract the username-to-channel lookup logic from `getVideos()` into a separate helper method.
+- [x] Extract the username-to-channel lookup logic from `getVideos()` into a separate helper method.
   - Add a method such as `resolveChannelIdFromUsername(source.username, errorTracker)`.
   - Keep `getVideos()` focused on delegating to `ChannelVideoService` after the channel ID is resolved.
-- [ ] Remove the `// TODO extract this to a separate method` comment.
+- [x] Remove the `// TODO extract this to a separate method` comment.
 
 ## Verification and follow-up
 - [ ] After implementing each change, remove the corresponding TODO comment.

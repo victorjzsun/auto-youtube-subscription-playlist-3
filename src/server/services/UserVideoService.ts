@@ -25,42 +25,63 @@ export default class UserVideoService implements VideoFetchService {
       );
     }
 
-    // TODO extract this to a separate method
+    const channelId = this.resolveChannelIdFromUsername(
+      source.username,
+      errorTracker
+    );
+
+    if (!channelId) {
+      return [];
+    }
+
+    return this.channelVideoService.getVideos(
+      { type: 'channel', channelId },
+      lastTimestamp,
+      errorTracker
+    );
+  }
+
+  /**
+   * Resolves a username to a YouTube channel ID.
+   * @param username The YouTube username to resolve.
+   * @param errorTracker Error tracker for logging failures.
+   * @returns The channel ID if found, null otherwise.
+   */
+  private resolveChannelIdFromUsername(
+    username: string,
+    errorTracker: ErrorTracker
+  ): string | null {
     try {
       const user: GoogleAppsScript.YouTube.Schema.ChannelListResponse =
         YouTube.Channels!.list('id', {
-          forUsername: source.username,
+          forUsername: username,
           maxResults: 1,
         });
       if (!user || !user.items) {
-        errorTracker.addError(`Cannot query for user ${source.username}`);
-        return [];
+        errorTracker.addError(`Cannot query for user ${username}`);
+        return null;
       }
       if (user.items.length === 0) {
-        errorTracker.addError(`No user with name ${source.username}`);
-        return [];
+        errorTracker.addError(`No user with name ${username}`);
+        return null;
       }
       if (user.items.length !== 1) {
-        errorTracker.addError(`Multiple users with name ${source.username}`);
-        return [];
+        errorTracker.addError(`Multiple users with name ${username}`);
+        return null;
       }
       if (!user.items[0].id) {
-        errorTracker.addError(`Cannot get id from user ${source.username}`);
-        return [];
+        errorTracker.addError(`Cannot get id from user ${username}`);
+        return null;
       }
 
-      return this.channelVideoService.getVideos(
-        { type: 'channel', channelId: user.items[0].id },
-        lastTimestamp,
-        errorTracker
-      );
+      return user.items[0].id;
     } catch (e: any) {
       errorTracker.addError(
-        `Cannot search for channel with name ${
-          source.username
-        }, ERROR: Message: [${e.message}] Details: ${JSON.stringify(e.details)}`
+        `Cannot search for channel with name ${username}, ERROR: Message: [${
+          e.message
+        }] Details: ${JSON.stringify(e.details)}`
       );
-      return [];
+      return null;
     }
   }
 }
