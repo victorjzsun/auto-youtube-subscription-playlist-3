@@ -1,5 +1,6 @@
 import ErrorTracker from '../ErrorTracker';
 import { Video, VideoSource } from '../models';
+import { DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND } from './constants';
 import dateToIsoString from './dateUtils';
 import type { VideoFetchService } from './VideoFetchService';
 
@@ -23,6 +24,10 @@ export default class ChannelVideoService implements VideoFetchService {
       lastTimestamp,
       errorTracker
     );
+
+    if (videoIds.length === 0 && DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND) {
+      Logger.log(`Channel with id ${source.channelId} has no new videos`);
+    }
     return videoIds.map((id) => ({ id, origin: 'channel' }));
   }
 

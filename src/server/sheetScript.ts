@@ -13,18 +13,15 @@ import dateToIsoString from './services/dateUtils';
 import {
   DEBUG_FLAG_DONT_UPDATE_PLAYLISTS,
   DEBUG_FLAG_DONT_UPDATE_TIMESTAMP,
-  DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND,
   reservedTableRows,
   reservedColumnPlaylist,
 } from './services/constants';
 import SheetConfigService from './services/SheetConfigService';
-import ChannelVideoService from './services/ChannelVideoService';
-import SubscriptionsVideoService from './services/SubscriptionsVideoService';
-import UserVideoService from './services/UserVideoService';
-import PlaylistVideoService from './services/PlaylistVideoService';
 import PlaylistUpdateService from './services/PlaylistUpdateService';
 import DebugLogService from './services/DebugLogService';
 import VideoFilterService from './services/VideoFilterService';
+import VideoFetchServiceFactory from './services/VideoFetchServiceFactory';
+import type { VideoFetchService } from './services/VideoFetchService';
 
 /**
  * Main Function to update all Playlists
@@ -38,12 +35,6 @@ export function updatePlaylists(): void {
 
   const MILLIS_PER_HOUR: number = 1000 * 60 * 60;
   const MILLIS_PER_DAY: number = MILLIS_PER_HOUR * 24;
-  const channelVideoService = new ChannelVideoService();
-  const subscriptionsVideoService = new SubscriptionsVideoService(
-    channelVideoService
-  );
-  const userVideoService = new UserVideoService(channelVideoService);
-  const playlistVideoService = new PlaylistVideoService();
   const playlistUpdateService = new PlaylistUpdateService();
   const debugLogService = new DebugLogService();
   const videoFilterService = new VideoFilterService();
@@ -71,56 +62,24 @@ export function updatePlaylists(): void {
     const videosToAdd: Video[] = [];
 
     config.sources.forEach((source) => {
-      let sourceVideos: Video[] = [];
-
-      // TODO: This should be a factory
-      switch (source.type) {
-        case 'subscriptions':
-          sourceVideos = subscriptionsVideoService.getVideos(
-            source,
-            config.lastTimestamp,
-            errorTracker
-          );
-          break;
-        case 'username':
-          sourceVideos = userVideoService.getVideos(
-            source,
-            config.lastTimestamp,
-            errorTracker
-          );
-          break;
-        case 'channel':
-          sourceVideos = channelVideoService.getVideos(
-            source,
-            config.lastTimestamp,
-            errorTracker
-          );
-          break;
-        case 'playlist':
-          sourceVideos = playlistVideoService.getVideos(
-            source,
-            config.lastTimestamp,
-            errorTracker
-          );
-          if (
-            DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND &&
-            sourceVideos.length === 0
-          ) {
-            Logger.log(
-              `Playlist with id ${source.playlistId} has no new videos`
-            );
-          }
-          break;
-        default:
-          break;
+      const videoFetchService: VideoFetchService | null =
+        VideoFetchServiceFactory.getServiceForSource(source, errorTracker);
+      if (!videoFetchService) {
+        errorTracker.addError(`Unsupported source type: ${source.type}`);
+        return;
       }
+
+      const sourceVideos: Video[] = videoFetchService.getVideos(
+        source,
+        config.lastTimestamp,
+        errorTracker
+      );
 
       videosToAdd.push(...sourceVideos);
     });
 
     Logger.log(`Acquired ${videosToAdd.length} videos`);
 
-    // TODO: Add filter service
     const filteredVideos: Video[] = videoFilterService.filterVideos(
       videosToAdd,
       config.filters

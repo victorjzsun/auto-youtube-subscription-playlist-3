@@ -1,5 +1,6 @@
 import ErrorTracker from '../ErrorTracker';
 import { Video, VideoSource } from '../models';
+import { DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND } from './constants';
 import dateToIsoString from './dateUtils';
 import type { VideoFetchService } from './VideoFetchService';
 
@@ -88,6 +89,10 @@ export default class PlaylistVideoService implements VideoFetchService {
         );
         return [];
       }
+    }
+
+    if (videoIds.length === 0 && DEBUG_FLAG_LOG_WHEN_NO_NEW_VIDEOS_FOUND) {
+      Logger.log(`Playlist with id ${source.playlistId} has no new videos`);
     }
 
     return videoIds.map((id) => ({ id, origin: 'playlist' }));

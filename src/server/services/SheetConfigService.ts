@@ -13,7 +13,6 @@ import { onOpen } from '../ui';
 
 /**
  * Service responsible for reading and writing playlist configurations to the sheet.
- * TODO: Create a configuration ID and map to rows, to remove having to pass row around
  */
 export default class SheetConfigService {
   private readonly sheet: GoogleAppsScript.Spreadsheet.Sheet;

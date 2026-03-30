@@ -27,9 +27,6 @@ export default class PlaylistUpdateService {
     }
 
     let successCount: number = 0;
-    // TODO: Clean up error counting here
-    const errorCountBefore: number = errorTracker.getPlaylistErrorCount();
-
     for (let idx = 0; idx < totalVids; idx += 1) {
       try {
         YouTube.PlaylistItems!.insert(
@@ -92,10 +89,8 @@ export default class PlaylistUpdateService {
       }
     }
 
-    const errorCountAfter: number = errorTracker.getPlaylistErrorCount();
-    const errorCount: number = errorCountAfter - errorCountBefore;
     Logger.log(
-      `Added ${successCount} video(s) to playlist. Error for ${errorCount} video(s).`
+      `Added ${successCount} video(s) to playlist. Error for ${errorTracker.getPlaylistErrorCount()} video(s).`
     );
   }
 
