@@ -59,6 +59,12 @@ export default class SheetConfigService {
   /**
    * Read all playlist configurations from the sheet.
    * Rows without a playlist ID are skipped.
+   *
+   * Playlist names can be stored inline with the playlist ID using the format:
+   * playlistId@playlistName
+   *
+   * If @ is present, it splits the playlist ID and name.
+   * If @ is absent, the entire value is treated as the playlist ID.
    */
   getAllPlaylistConfigurations(): PlaylistConfiguration[] {
     const data: any[][] = this.sheet.getDataRange().getValues();
@@ -69,8 +75,12 @@ export default class SheetConfigService {
       iRow < this.sheet.getLastRow();
       iRow += 1
     ) {
-      const playlistId: string = data[iRow][reservedColumnPlaylist];
-      if (!playlistId) continue;
+      const rawPlaylistData: string = data[iRow][reservedColumnPlaylist];
+      if (!rawPlaylistData) continue;
+
+      // Parse playlist name from composite format: playlistId@name
+      const { playlistId, playlistName } =
+        this.parsePlaylistIdAndName(rawPlaylistData);
 
       const lastTimestampStr: string = data[iRow][reservedColumnTimestamp];
       let lastTimestamp: Date;
@@ -87,7 +97,7 @@ export default class SheetConfigService {
       const id = makeid();
       const config: PlaylistConfiguration = {
         id,
-        name: id,
+        name: playlistName || 'Playlist',
         playlistId,
         lastTimestamp,
         frequencyHours:
@@ -124,6 +134,48 @@ export default class SheetConfigService {
     this.sheet
       .getRange(rowIndex + 1, reservedColumnTimestamp + 1)
       .setValue(timestamp.toISOString());
+  }
+
+  /**
+   * Update the playlist name for a given config id.
+   * The name is stored inline with the playlist ID using the format: playlistId@name
+   * @param id - The internal config ID
+   * @param playlistId - The YouTube playlist ID
+   * @param name - The playlist name (empty string removes the name)
+   */
+  updatePlaylistName(id: string, playlistId: string, name: string): void {
+    const rowIndex = this.idToRow.get(id);
+    if (rowIndex === undefined) {
+      throw new Error(`Config id ${id} not found`);
+    }
+
+    const newValue = name ? `${playlistId}@${name}` : playlistId;
+    this.sheet
+      .getRange(rowIndex + 1, reservedColumnPlaylist + 1)
+      .setValue(newValue);
+  }
+
+  /**
+   * Parse the playlist ID and name from the composite format: playlistId@name
+   * If @ is absent, the entire value is treated as the playlist ID.
+   * @param rawPlaylistData - Raw playlist data from the sheet
+   * @returns Object with parsed playlistId and playlistName
+   */
+  private parsePlaylistIdAndName(rawPlaylistData: string): {
+    playlistId: string;
+    playlistName: string;
+  } {
+    const atIndex = rawPlaylistData.indexOf('@');
+    if (atIndex > -1) {
+      return {
+        playlistId: rawPlaylistData.substring(0, atIndex),
+        playlistName: rawPlaylistData.substring(atIndex + 1),
+      };
+    }
+    return {
+      playlistId: rawPlaylistData,
+      playlistName: '',
+    };
   }
 
   private parseVideoSourcesFromRow(row: any[]): VideoSource[] {
