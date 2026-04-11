@@ -21,11 +21,6 @@ const clientEntrypoints = [
     filename: 'dialog-demo-mui',
     template: 'dialog-demo-mui/index.html',
   },
-  {
-    name: 'CLIENT - Sidebar About Page',
-    filename: 'sidebar-about-page',
-    template: 'sidebar-about-page/index.html',
-  },
 ];
 
 const keyPath = resolve(__dirname, './certs/key.pem');

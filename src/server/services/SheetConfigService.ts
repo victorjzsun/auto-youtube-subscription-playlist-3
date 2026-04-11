@@ -9,7 +9,7 @@ import {
 } from './constants';
 import { PlaylistConfiguration, VideoSource } from '../models';
 import dateToIsoString from './dateUtils';
-import { onOpen } from '../ui';
+import { makeid, onOpen } from '../ui';
 
 /**
  * Service responsible for reading and writing playlist configurations to the sheet.
@@ -84,7 +84,7 @@ export default class SheetConfigService {
         lastTimestamp = new Date(lastTimestampStr);
       }
 
-      const id = `config-${iRow}`;
+      const id = makeid();
       const config: PlaylistConfiguration = {
         id,
         name: id,

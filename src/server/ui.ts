@@ -32,3 +32,14 @@ export const openAboutSidebar = () => {
   const html = HtmlService.createHtmlOutputFromFile('sidebar-about-page');
   SpreadsheetApp.getUi().showSidebar(html);
 };
+
+export const makeid = () => {
+  let result = '';
+  const characters =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const charactersLength = characters.length;
+  for (let i = 0; i < 32; i += 1) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+  return result;
+};
