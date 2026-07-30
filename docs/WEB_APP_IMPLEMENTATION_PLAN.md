@@ -55,92 +55,94 @@ This document outlines the step-by-step implementation plan to refactor the curr
 
 ---
 
-## Playlist Name Storage Implementation
+## Pre-Implementation Investigation
 
-### Design Overview
-Playlist names are stored inline with the Playlist ID in the sheet using a composite format: `playlistId@playlistName`
+**These items need clarification from an engineer before execution:**
 
-**Example:**
-```
-PLxxxxxxxxxxxxx@My Favorite Videos
-PLyyyyyyyyyyyyyyy@Tech Channel
-PLzzzzzzzzzzzzzz
-```
+### 1. Sheet Structure Modifications
+**Question:** Should we preserve the current 0-indexed column layout (Cols A-F reserved + G+ for sources) when building the web UI?
 
-### Format Specification
-- **Delimiter:** `@` symbol (single occurrence expected)
-- **Structure:** `playlistId@name`
-- **Backward Compatibility:** If `@` is absent, the name is default to "Playlist"
-- **Storage Location:** Column A (Playlist ID column), same as the playlist ID
-- **No Sheet Schema Changes:** Existing sheet structure remains unchanged; name is embedded in the existing column
+**Context:**
+- Current sheet layout: `[Playlist ID, Timestamp, Freq Hours, Delete Days, Shorts Filter, UNUSED, Channel1, Channel2, ...]`
+- `SheetConfigService.parseVideoSourcesFromRow()` reads sources from column index 6 onward
+- The MVP design doesn't show how to add multiple sources in the UI
 
-### SheetConfigService Implementation Details
+**Investigation Tasks:**
+- [ ] Determine if the UI should support unlimited sources (current sheet does)
+- [ ] Decide: should modal support dynamic source field addition like the mockup suggests?
+- [ ] Clarify: should we add a "name" column for playlists, or keep using auto-generated `config-{rowIndex}` IDs?
 
-#### Reading Playlist Names
-In `getAllPlaylistConfigurations()`:
+**Blocking:** Phase 2+ playlist editing (task #4)
 
-1. Extract raw value from column A: `data[iRow][reservedColumnPlaylist]`
-2. Check if value contains `@` symbol
-3. If `@` exists:
-   - Split by `@` to separate playlist ID and name
-   - **Important:** Use only the first `@` as delimiter (if name contains `@`, it's preserved in the name part)
-   - Extract playlist ID (everything before `@`)
-   - Extract name (everything after first `@`)
-4. If `@` does not exist:
-   - Treat entire value as playlist ID
-   - Name defaults to "Playlist"
+---
 
-#### Code Pattern
-```typescript
-const rawPlaylistData: string = data[iRow][reservedColumnPlaylist];
-let playlistId: string = rawPlaylistData;
-let playlistName: string = '';
+### 2. Google Apps Script Deployment Model
+**Question:** How will the new web app be deployed vs. the existing Menu?
 
-const atIndex = rawPlaylistData.indexOf('@');
-if (atIndex > -1) {
-  playlistId = rawPlaylistData.substring(0, atIndex);
-  playlistName = rawPlaylistData.substring(atIndex + 1);
-}
+**Context:**
+- Current ui.ts has two entry points: `openDialogMUI()` and `openAboutSidebar()`
+- Phase1 MVP shows a full-page web app interface
+- Apps Script can deploy as: modal dialog, sidebar, or full-width web app
 
-const config: PlaylistConfiguration = {
-  id,
-  name: playlistName || 'Playlist',  // Use provided name or fall back to literal
-  playlistId,  // Store the YouTube playlist ID separately
-  // ... rest of config
-};
-```
+**Investigation Tasks:**
+- [ ] Confirm target deployment: modal dialog, sidebar, or `doGet()` web app?
+- [ ] If web app (doGet): What URL pattern? (e.g., `?view=playlists`, `?view=logs`)
+- [ ] Should the menu system change? (replace current MUI demo or add new playlist manager menu item?)
 
-#### Updating Playlist Names (Web App Integration)
-When the web app saves a playlist name:
+**Blocking:** Tasks #1, #2, #8
 
-1. Format the value as `playlistId@name`
-2. Write to the appropriate row in column A via `sheet.getRange(rowIndex + 1, reservedColumnPlaylist + 1).setValue(newValue)`
-3. No timestamp or other operations are affected
+---
 
-**Important:** This operation is non-destructive. A playlist without a name (`playlistId` only) is valid and continues to work normally.
+### 3. Playlist Name/Identifier Strategy
+**Question:** How should playlists be identified and named in the UI?
 
-#### Example Scenarios
+**Context:**
+- Current code uses auto-generated IDs: `config-${iRow}`
+- SheetConfigService stores ID-to-row mapping in memory only (lost on page reload)
+- UI needs stable identifiers for edit/delete operations
+- MVP design shows "Playlist Name" in card titles
 
-| Sheet Cell (Column A)     | Parsed playlistId     | Parsed name         | Behavior                       |
-|---------------------------|-----------------------|---------------------|--------------------------------|
-| `PLxxxxxxxxxxxxx`         | `PLxxxxxxxxxxxxx`     | `'Playlist'`        | Works; name shows as in UI      |
-| `PLxxxxxxxxxxxxx@Videos`  | `PLxxxxxxxxxxxxx`     | `Videos`            | Works; name shows in UI         |
-| `PLxxxxxxxxxxxxx@My@List` | `PLxxxxxxxxxxxxx`     | `My@List`           | Works; only first `@` is split  |
-| (empty cell)              | (skipped row)         | N/A                 | Row ignored per existing logic  |
+**Investigation Tasks:**
+- [ ] Should we add a "Playlist Name" column to the sheet for user-friendly display?
+- [ ] Or use the YouTube playlist ID/name fetched from the API?
+- [ ] How to persist config IDs across sheet changes (row insert/delete)?
 
-### Integration Points
+**Blocking:** Tasks #3, #4, #5
 
-1. **SheetConfigService.getAllPlaylistConfigurations()** - Parse name from composite value
-2. **Web App (PlaylistEditor/PlaylistCard)** - Display and allow editing playlist name
-3. **Sheet column A writing** - Format value as `playlistId@name` when saving
-4. **Backward Compatibility** - Playlists without names (legacy rows) continue to function
+---
 
-### No Impact on Existing Functionality
-- Playlist ID extraction is unchanged (split before `@`)
-- Video fetching logic is unaffected
-- Update timestamps and other configurations operate normally
-- Sheet layout requires no modifications
-- Existing playlists without names continue to work
+### 4. Error Handling & Validation Strategy
+**Question:** What validation should happen on the client vs. server?
+
+**Context:**
+- Server has YouTube API error handling (404 private videos, 409 duplicates)
+- Current UI has minimal validation
+- Phase1 MVP doesn't show error states/messages
+
+**Investigation Tasks:**
+- [ ] Which form fields are required? (Playlist ID, at least one source?)
+- [ ] Should client validate playlist ID format (PL...)?
+- [ ] Should client validate channel ID/username before saving?
+- [ ] What error messages to show for API failures? (return from server)
+
+**Blocking:** Tasks #3, #4, #5
+
+---
+
+### 5. Pagination & Large Playlist Lists
+**Question:** How should the UI handle playlists if user has 20+, 50+, 100+ playlists?
+
+**Context:**
+- `SheetConfigService.getAllPlaylistConfigurations()` loads all rows
+- Phase1 MVP shows simple card grid with no pagination
+- Current sheet has 900 debug rows (potential large data)
+
+**Investigation Tasks:**
+- [ ] Load all playlists on startup, or paginate after N?
+- [ ] If pagination: what page size?
+- [ ] Should search/filter be added in future phases?
+
+**Blocking:** Task #2 (minor)
 
 ---
 
@@ -358,12 +360,12 @@ npm run lint
 - `src/client/playlist-manager/components/PlaylistEditor.tsx` (NEW)
   - Modal with form fields:
     - Playlist ID (required, YouTube PL... format)
-    - Playlist Name (optional, for UI display, defaults to "Playlist" in not provided)
+    - Playlist Name (optional, for UI display)
     - Update Frequency (hours, optional)
     - Auto-delete (days, optional)
-    - Last execution timestamp (ISO timestamp, optional)
+    - Exclude Shorts filter (toggle)
   - Submit/Cancel buttons
-  - Validation (playlist ID format)
+  - Validation (playlist ID format, at least one source)
 - `src/client/playlist-manager/components/PlaylistManager.tsx` (MODIFY)
   - Add modal open/close state
   - Show modal when "Add Playlist" button clicked
@@ -383,8 +385,12 @@ npm run lint
 
 **Notes:**
 - Use Material UI TextField, Checkbox, Button
-- Validation: Playlist ID must start with "PL"
+- Validation: Playlist ID must start with "PL" or be a valid YouTube URL
 - When editing, populate form with existing values
+
+**⚠️ INVESTIGATE BEFORE STARTING:**
+- Should playlist name be editable? (Currently not in sheet schema)
+- Required validation: must have at least one source before saving?
 
 ---
 
@@ -397,6 +403,8 @@ npm run lint
   - Writes new row to sheet with config data
   - Returns config ID on success, throws error on failure
 - `src/server/index.ts` (MODIFY) - Export `createPlaylist`
+- `src/client/utils/serverFunctions.ts` (MODIFY)
+  - Add signature: `createPlaylist(config): Promise<string>`
 - `src/client/playlist-manager/components/PlaylistEditor.tsx` (MODIFY)
   - Call `createPlaylist` on form submit
   - Handle success/error responses
@@ -405,7 +413,7 @@ npm run lint
 **Acceptance Criteria:**
 - ✅ New row written to sheet with all config fields
 - ✅ Sources written to columns G+
-- ✅ Timestamp initialized to 24 hours ago if not specified
+- ✅ Timestamp initialized to 24 hours ago (standard behavior)
 - ✅ Validation errors returned to client with helpful messages
 - ✅ Playlist list refreshes after successful create
 
@@ -418,7 +426,7 @@ npm run lint
 **Notes:**
 - Reuse `SheetConfigService` for consistency
 - Validate on server: playlist ID format, YouTube API access
-- Null values passed for unused values (filters) to be implemented in future phases
+- Handle edge case: if sources array empty, reject with error
 
 ---
 
@@ -431,8 +439,11 @@ npm run lint
   - Updates all config columns with new values
   - Clears and rewrites source columns
 - `src/server/index.ts` (MODIFY) - Export `updatePlaylist`
-- `src/client/playlist-manager/components/PlaylistCard.tsx` (MODIFY)
-  - Open modal with existing config data populated when Settings button clicked
+- `src/client/utils/serverFunctions.ts` (MODIFY)
+  - Add signature: `updatePlaylist(id, config): Promise<void>`
+- `src/client/playlist-manager/components/PlaylistManager.tsx` (MODIFY)
+  - Pass `onEdit` callback to PlaylistCard
+  - Open modal with existing config data populated
 - `src/client/playlist-manager/components/PlaylistEditor.tsx` (MODIFY)
   - Detect edit vs. create mode (id param)
   - Change submit button text accordingly
@@ -452,9 +463,12 @@ npm run lint
 ```
 
 **Notes:**
-- Editing playlist ID is allowed
-- Timestamp editing is allowed (For manual backfill and other scenarios)
-- No changes to values that are null, as they will be updated in future phases
+- IMPORTANT: Do NOT update lastTimestamp during config edit (only on successful video add)
+- Re-validate sources: at least one required
+
+**⚠️ INVESTIGATE BEFORE STARTING:**
+- Should editing playlist ID be allowed? (Changes what videos added to)
+- Should we allow timestamp editing? (For manual backfill scenarios)
 
 ---
 
@@ -463,10 +477,12 @@ npm run lint
 **Files to Create/Modify:**
 - `src/server/sheetScript.ts` (NEW/MODIFY)
   - Add `deletePlaylist(id: string): void` function
-  - Resolves config ID to row, deletes row from sheet
+  - Resolves ID to row, deletes row from sheet
   - Handles edge case: don't delete header rows (indices < 3)
 - `src/server/index.ts` (MODIFY) - Export `deletePlaylist`
-- `src/client/playlist-manager/components/PlaylistEditor.tsx` (MODIFY)
+- `src/client/utils/serverFunctions.ts` (MODIFY)
+  - Add signature: `deletePlaylist(id): Promise<void>`
+- `src/client/playlist-manager/components/PlaylistCard.tsx` (MODIFY)
   - Add "Delete" button with confirmation dialog
   - Call `deletePlaylist` on confirm
   - Refresh list on success
@@ -492,15 +508,19 @@ npm run lint
 
 # PHASE 4: SOURCE MANAGEMENT UI
 
-## Task 4.1: Add functionality for adding/removing sources
+## Task 4.1: Create SourceManager Component
 **Objective:** Allow adding/removing video sources from playlist  
 **Files to Create/Modify:**
-- `src/client/playlist-manager/components/PlaylistCard.tsx` (NEW)
-  - List existing sources as chips as shown in mockup
-- `src/client/playlist-manager/components/PlaylistEditor.tsx` (MODIFY)
-  - List existing sources as a list of text input boxes as shown in mockup, with delete button for removing
-  - Have "Add source" button for adding new sources
+- `src/client/playlist-manager/components/SourceManager.tsx` (NEW)
+  - List existing sources as removable items/chips
+  - Input section for adding new sources
+  - Source type selector (channel ID, username, subscription, playlist)
   - Validation: prevent duplicate sources
+  - UI matches mockup source management section
+- `src/client/playlist-manager/components/PlaylistEditor.tsx` (MODIFY)
+  - Include SourceManager component
+  - Pass sources array to SourceManager
+  - Receive updated sources from SourceManager in onSave
 
 **Acceptance Criteria:**
 - ✅ Existing sources display as removable chips
@@ -516,23 +536,120 @@ npm run lint
 ```
 
 **Notes:**
-- Source types: channel ID (UC...), username, playlist ID (PL...), "ALL" (subscriptions), auto-detected from input
-- Validation of source formatting, but no using of YouTube API to actually verify
-- Prevent duplicate sources (same identifier)
-- Unlimited number of sources
+- Source types: channel ID (UC...), username, playlist ID (PL...), "ALL" (subscriptions)
+- Prevent duplicate sources (same type + identifier)
+- Show helpful placeholder text for each source type
+
+**⚠️ INVESTIGATE BEFORE STARTING:**
+- Should there be a maximum number of sources per playlist?
+- Should we validate channel IDs/usernames against YouTube API?
+- Should we show a source type selector, or auto-detect from input?
 
 ---
 
-# PHASE 5: OTHER CONFIGURATIONS
+## Task 4.2: Server-Side Source Parsing & Validation
+**Objective:** Validate and normalize video sources  
+**Files to Create/Modify:**
+- `src/server/services/SheetConfigService.ts` (MODIFY)
+  - Extract `parseVideoSourcesFromRow()` logic to new `normalizeVideoSource()` function
+  - Add validation for each source type (format checks)
+- `src/server/sheetScript.ts` (MODIFY)
+  - In `createPlaylist`/`updatePlaylist`, call validation function
+  - Return client-side error if sources invalid
 
-## Task 5.1: Add Action Button to PlaylistManager
+**Acceptance Criteria:**
+- ✅ Source format validation (PL... for playlists, UC... for channels)
+- ✅ Username validation (non-empty string)
+- ✅ "ALL" keyword recognized
+- ✅ Error messages clear for invalid sources
+- ✅ Normalization applied (trailing spaces removed)
+
+**Build & Lint:**
+```bash
+npm run build
+npm run lint
+```
+
+**Notes:**
+- Reuse existing parsing logic from SheetConfigService
+- Don't require YouTube API validation (too slow for form submission)
+
+---
+
+# PHASE 5: FILTER & SETTINGS
+
+## Task 5.1: Create FilterConfiguration Component
+**Objective:** Allow user to set video filtering options  
+**Files to Create/Modify:**
+- `src/client/playlist-manager/components/FilterConfiguration.tsx` (NEW)
+  - Toggle for "Exclude Shorts" filter
+  - Display description of each filter
+  - Show preview of how filter affects videos (optional, Phase 2)
+- `src/client/playlist-manager/components/PlaylistEditor.tsx` (MODIFY)
+  - Include FilterConfiguration component
+  - Pass filters to/from component
+
+**Acceptance Criteria:**
+- ✅ Exclude Shorts toggle visible
+- ✅ Toggle state reflects current config
+- ✅ Filter description clear and helpful
+- ✅ Integrates with save flow
+
+**Build & Lint:**
+```bash
+npm run build
+npm run lint
+```
+
+**Notes:**
+- Currently only "excludeShorts" filter exists
+- Future filters: duration (videos > 1 min), premiere (exclude live), etc.
+
+---
+
+## Task 5.2: Implement Update Now / Manual Trigger
+**Objective:** Allow user to manually trigger playlist update from UI  
+**Files to Create/Modify:**
+- `src/client/playlist-manager/components/PlaylistCard.tsx` (MODIFY)
+  - Add "Update Now" button
+  - Show updating spinner during operation
+  - Display success/error message
+- `src/server/sheetScript.ts` (MODIFY)
+  - Add `updatePlaylistNow(playlistId: string): {success: bool, message: string}` function
+  - Calls existing `updatePlaylists()` logic but for single playlist
+  - Resets frequency check (ignores time interval)
+
+**Acceptance Criteria:**
+- ✅ Button triggers update for single playlist
+- ✅ Loading spinner shows during update
+- ✅ Success message shows videos added count
+- ✅ Error message displays on failure
+- ✅ Button disabled while updating
+
+**Build & Lint:**
+```bash
+npm run build
+npm run lint
+```
+
+**Notes:**
+- Reuse PlaylistUpdateService for consistency
+- Don't update timestamp if user wants dry-run? (investigate)
+
+---
+
+## Task 5.3: Add Refresh & Action Buttons to PlaylistManager
 **Objective:** Top-level actions for all playlists  
 **Files to Create/Modify:**
 - `src/client/playlist-manager/components/PlaylistManager.tsx` (MODIFY)
+  - Add "Refresh List" button (reload all playlists from sheet)
   - Add "Update All Playlists" button (trigger full update)
   - Show operation progress/loading state
+- `src/server/sheetScript.ts` (MODIFY, if needed)
+  - Ensure `updatePlaylists()` callable with same async pattern
 
 **Acceptance Criteria:**
+- ✅ Refresh List reloads playlists from sheet
 - ✅ Update All calls existing updatePlaylists function
 - ✅ Progress indication while updating
 - ✅ List refreshes after update completes
@@ -545,12 +662,67 @@ npm run lint
 
 **Notes:**
 - "Update All" uses existing `updatePlaylists()` function already in menu
+- Consider: should "Update All" show progress for each playlist?
 
 ---
 
-# PHASE 6: TESTING PHASE
+# Integration & Testing Phase
 
-## Task 6.1: Build & Lint Final Verification
+## Task 6.1: Comprehensive Testing Checklist
+**Objective:** Verify all features work end-to-end  
+
+**Test Scenarios:**
+
+### Playlist List View
+- [ ] Load playlist manager, verify playlists display
+- [ ] Empty state shows when no playlists exist
+- [ ] Card displays all config fields correctly
+- [ ] Status indicators show correct colors
+- [ ] Responsive layout works on mobile/tablet
+
+### Create Playlist
+- [ ] Open "Add Playlist" modal
+- [ ] Form fields visible and functional
+- [ ] Validation shows error for invalid playlist ID
+- [ ] Submit creates new row in sheet
+- [ ] Playlist appears in list after create
+- [ ] Can add sources and filters before saving
+
+### Edit Playlist
+- [ ] Click edit button on playlist card
+- [ ] Modal opens with existing data populated
+- [ ] Modify fields and save
+- [ ] Sheet row updated with new values
+- [ ] List refreshes with updated data
+
+### Delete Playlist
+- [ ] Click delete button
+- [ ] Confirmation dialog shows
+- [ ] Cancel prevents deletion
+- [ ] Confirm removes playlist from sheet and list
+
+### Update Now
+- [ ] Click "Update Now" on card
+- [ ] Spinner shows during operation
+- [ ] Success message displays (or error)
+- [ ] Timestamp updates in sheet
+- [ ] YouTube playlists updated with new videos
+
+### Menu Integration
+- [ ] Google Sheets menu shows "Manage Playlists" item
+- [ ] Clicking opens web app correctly
+- [ ] Manual "Update Playlists" still works
+- [ ] Manual "Get Channel ID" still works
+
+### Error Handling
+- [ ] Invalid playlist ID shows validation error
+- [ ] Network errors show error message
+- [ ] Sheet access errors handled gracefully
+- [ ] YouTube API errors logged and user notified
+
+---
+
+## Task 6.2: Build & Lint Final Verification
 **Objective:** Ensure clean build with zero errors/warnings
 
 ```bash
@@ -560,7 +732,7 @@ npm run lint
 
 **Acceptance Criteria:**
 - ✅ Zero TypeScript errors
-- ✅ Zero ESLint errors (excluding "any" errors due to API)
+- ✅ Zero ESLint errors
 - ✅ All assets bundled correctly
 - ✅ No console warnings in web app
 - ✅ Dist files ready for deployment
@@ -612,11 +784,12 @@ npm run lint
 - **Modify:** `src/client/playlist-manager/components/PlaylistManager.tsx`
 
 ## Phase 4 Files
-- **Modify:** `src/client/playlist-manager/components/PlaylistCard.tsx`
-- **Modify:** `src/client/playlist-manager/components/PlaylistEditor.tsx`
+- **Create:** `src/client/playlist-manager/components/SourceManager.tsx`
+- **Modify:** `src/server/services/SheetConfigService.ts` - Add validation
 
 ## Phase 5 Files
-- **Modify:** `src/client/playlist-manager/components/PlaylistManager.tsx`
+- **Create:** `src/client/playlist-manager/components/FilterConfiguration.tsx`
+- **Modify:** `src/client/playlist-manager/components/PlaylistCard.tsx`
 
 ---
 
@@ -633,11 +806,11 @@ Task 2.1 (PlaylistCard) → Task 2.2 (Stats)
   ↓
 Task 3.1 (Editor modal) → Task 3.2 (Create) → Task 3.3 (Update) → Task 3.4 (Delete)
   ↓
-Task 4.1 (Sources)
+Task 4.1 (SourceManager) → Task 4.2 (Validation)
   ↓
-Task 5.1 (Global Actions)
+Task 5.1 (Filters) → Task 5.2 (Update Now) → Task 5.3 (Refresh/Actions)
   ↓
-Task 6.1 (Build) → Task 6.2 (Docs)
+Task 6.1 (Testing) → Task 6.2 (Build) → Task 6.3 (Docs)
 ```
 
 **Critical Path:** Most tasks must complete sequentially because each phase depends on previous infrastructure.
@@ -665,6 +838,11 @@ Task 6.1 (Build) → Task 6.2 (Docs)
 - Current limit: 200 videos max per execution
 - Mitigation: cache video counts in sheet, update only on demand
 
+### Config ID Stability
+- Current ID scheme: `config-${rowIndex}` (loses stability on row insert/delete)
+- MUST investigate better approach (task investigation item #3)
+- Blocks all CRUD operations if not resolved
+
 ### AppsScript Runtime
 - Execution time limit: 6 minutes for time-triggered, 30 minutes for manual
 - Web app responses should be < 5 seconds
@@ -686,6 +864,30 @@ Upon completion of this plan, the following should be true:
 8. ✅ Zero TypeScript/ESLint errors in production build
 9. ✅ Menu system integrates seamlessly with new web app
 10. ✅ Error handling is robust and user-friendly
+
+---
+
+# Post-Implementation Roadmap (Future Phases)
+
+### Phase 6: Advanced Features
+- [ ] Playlist search/filter in UI
+- [ ] Batch operations (update multiple playlists)
+- [ ] Video filters UI preview
+- [ ] Logs viewer (error tracking)
+- [ ] Settings panel (quota limits, debug flags)
+
+### Phase 7: Performance & Polish
+- [ ] Pagination for large playlist lists
+- [ ] Async/background updates with status polling
+- [ ] Caching for video counts
+- [ ] Dark mode support
+- [ ] Keyboard navigation/accessibility
+
+### Phase 8: Additional Features (from GitHub issues)
+- [ ] Duplicate video detection/removal
+- [ ] Video recommendations
+- [ ] Playlist templates
+- [ ] Advanced filtering (duration, premiere status, etc.)
 
 ---
 

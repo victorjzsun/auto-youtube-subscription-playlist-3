@@ -21,6 +21,11 @@ const clientEntrypoints = [
     filename: 'dialog-demo-mui',
     template: 'dialog-demo-mui/index.html',
   },
+  {
+    name: 'CLIENT - Playlist Manager',
+    filename: 'playlist-manager',
+    template: 'playlist-manager/index.html',
+  },
 ];
 
 const keyPath = resolve(__dirname, './certs/key.pem');

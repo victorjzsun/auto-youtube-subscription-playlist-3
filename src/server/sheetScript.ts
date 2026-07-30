@@ -8,7 +8,7 @@
  */
 
 import ErrorTracker from './ErrorTracker';
-import { PlaylistChangeSet, Video } from './models';
+import { PlaylistChangeSet, PlaylistConfiguration, Video } from './models';
 import dateToIsoString from './services/dateUtils';
 import {
   DEBUG_FLAG_DONT_UPDATE_PLAYLISTS,
@@ -23,6 +23,101 @@ import VideoFilterService from './services/VideoFilterService';
 import VideoFetchServiceFactory from './services/VideoFetchServiceFactory';
 import type { VideoFetchService } from './services/VideoFetchService';
 
+function updateSinglePlaylist(
+  config: PlaylistConfiguration,
+  errorTracker: ErrorTracker,
+  sheetConfigService: SheetConfigService,
+  playlistUpdateService: PlaylistUpdateService,
+  videoFilterService: VideoFilterService,
+  debugLogService: DebugLogService,
+  options: { skipIfNotDue?: boolean } = {}
+): void {
+  Logger.clear();
+  Logger.log(`Updating config with name ${config.name}`);
+
+  const MILLIS_PER_HOUR: number = 1000 * 60 * 60;
+  const MILLIS_PER_DAY: number = MILLIS_PER_HOUR * 24;
+
+  if (options.skipIfNotDue !== false) {
+    const dateDiff: number = Date.now() - config.lastTimestamp.getTime();
+    const nextTime: number = (config.frequencyHours ?? 0) * MILLIS_PER_HOUR;
+    if (nextTime && dateDiff <= nextTime) {
+      Logger.log('Skipped: Not time yet');
+      return;
+    }
+  }
+
+  const videosToAdd: Video[] = [];
+
+  config.sources.forEach((source) => {
+    const videoFetchService: VideoFetchService | null =
+      VideoFetchServiceFactory.getServiceForSource(source, errorTracker);
+    if (!videoFetchService) {
+      errorTracker.addError(`Unsupported source type: ${source.type}`);
+      return;
+    }
+
+    const sourceVideos: Video[] = videoFetchService.getVideos(
+      source,
+      config.lastTimestamp,
+      errorTracker
+    );
+
+    videosToAdd.push(...sourceVideos);
+  });
+
+  Logger.log(`Acquired ${videosToAdd.length} videos`);
+
+  const filteredVideos: Video[] = videoFilterService.filterVideos(
+    videosToAdd,
+    config.filters
+  );
+
+  Logger.log(`Filtering finished, left with ${filteredVideos.length} videos`);
+
+  const changeSet: PlaylistChangeSet = {
+    videosToAdd: filteredVideos,
+    playlistItemsToDelete: [],
+  };
+
+  if (!errorTracker.hasErrors()) {
+    if (!DEBUG_FLAG_DONT_UPDATE_PLAYLISTS) {
+      playlistUpdateService.addVideos(
+        config.playlistId,
+        changeSet.videosToAdd,
+        errorTracker
+      );
+    } else {
+      errorTracker.addError("Don't Update Playlists debug flag is set");
+    }
+
+    const daysBack: number | null = config.deleteDays;
+    if (daysBack && daysBack > 0) {
+      const deleteBeforeDate: Date = new Date(
+        Date.now() - daysBack * MILLIS_PER_DAY
+      );
+      Logger.log(`Delete before: ${dateToIsoString(deleteBeforeDate)}`);
+      playlistUpdateService.deleteItems(
+        config.playlistId,
+        deleteBeforeDate,
+        errorTracker
+      );
+    }
+  }
+
+  if (!errorTracker.hasErrors() && !DEBUG_FLAG_DONT_UPDATE_TIMESTAMP) {
+    sheetConfigService.updateLastTimestamp(config.id, new Date());
+  }
+
+  const newLogs: string[][] = Logger.getLog()
+    .split('\n')
+    .slice(0, -1)
+    .map((log: string) => log.split(' INFO: '));
+  debugLogService.appendLogs(newLogs);
+
+  errorTracker.resetForNextPlaylist();
+}
+
 /**
  * Main Function to update all Playlists
  * @param sheetParam - Optional sheet parameter, defaults to first sheet
@@ -33,8 +128,6 @@ export function updatePlaylists(): void {
   const { service: sheetConfigService, spreadsheet } =
     SheetConfigService.initialize();
 
-  const MILLIS_PER_HOUR: number = 1000 * 60 * 60;
-  const MILLIS_PER_DAY: number = MILLIS_PER_HOUR * 24;
   const playlistUpdateService = new PlaylistUpdateService();
   const debugLogService = new DebugLogService();
   const videoFilterService = new VideoFilterService();
@@ -49,85 +142,15 @@ export function updatePlaylists(): void {
   }
 
   configs.forEach((config) => {
-    Logger.clear();
-    Logger.log(`Updating config with name ${config.name}`);
-
-    const dateDiff: number = Date.now() - config.lastTimestamp.getTime();
-    const nextTime: number = (config.frequencyHours ?? 0) * MILLIS_PER_HOUR;
-    if (nextTime && dateDiff <= nextTime) {
-      Logger.log('Skipped: Not time yet');
-      return;
-    }
-
-    const videosToAdd: Video[] = [];
-
-    config.sources.forEach((source) => {
-      const videoFetchService: VideoFetchService | null =
-        VideoFetchServiceFactory.getServiceForSource(source, errorTracker);
-      if (!videoFetchService) {
-        errorTracker.addError(`Unsupported source type: ${source.type}`);
-        return;
-      }
-
-      const sourceVideos: Video[] = videoFetchService.getVideos(
-        source,
-        config.lastTimestamp,
-        errorTracker
-      );
-
-      videosToAdd.push(...sourceVideos);
-    });
-
-    Logger.log(`Acquired ${videosToAdd.length} videos`);
-
-    const filteredVideos: Video[] = videoFilterService.filterVideos(
-      videosToAdd,
-      config.filters
+    updateSinglePlaylist(
+      config,
+      errorTracker,
+      sheetConfigService,
+      playlistUpdateService,
+      videoFilterService,
+      debugLogService,
+      { skipIfNotDue: true }
     );
-
-    Logger.log(`Filtering finished, left with ${filteredVideos.length} videos`);
-
-    const changeSet: PlaylistChangeSet = {
-      videosToAdd: filteredVideos,
-      playlistItemsToDelete: [],
-    };
-
-    if (!errorTracker.hasErrors()) {
-      if (!DEBUG_FLAG_DONT_UPDATE_PLAYLISTS) {
-        playlistUpdateService.addVideos(
-          config.playlistId,
-          changeSet.videosToAdd,
-          errorTracker
-        );
-      } else {
-        errorTracker.addError("Don't Update Playlists debug flag is set");
-      }
-
-      const daysBack: number | null = config.deleteDays;
-      if (daysBack && daysBack > 0) {
-        const deleteBeforeDate: Date = new Date(
-          Date.now() - daysBack * MILLIS_PER_DAY
-        );
-        Logger.log(`Delete before: ${dateToIsoString(deleteBeforeDate)}`);
-        playlistUpdateService.deleteItems(
-          config.playlistId,
-          deleteBeforeDate,
-          errorTracker
-        );
-      }
-    }
-
-    if (!errorTracker.hasErrors() && !DEBUG_FLAG_DONT_UPDATE_TIMESTAMP) {
-      sheetConfigService.updateLastTimestamp(config.id, new Date());
-    }
-
-    const newLogs: string[][] = Logger.getLog()
-      .split('\n')
-      .slice(0, -1)
-      .map((log: string) => log.split(' INFO: '));
-    debugLogService.appendLogs(newLogs);
-
-    errorTracker.resetForNextPlaylist();
   });
 
   // Log finished script, only populate second column to signify end of execution when retrieving logs
@@ -191,6 +214,80 @@ export function getChannelId(): void {
     }
 
     ui.alert(`No results found for ${text}.`);
+  }
+}
+
+/**
+ * Get all playlist configurations from the sheet.
+ * Serializes dates to ISO strings for Apps Script compatibility.
+ * @returns Array of playlist configurations with serialized data
+ */
+export function getPlaylists(): any[] {
+  const { service: sheetConfigService } = SheetConfigService.initialize();
+  const configs = sheetConfigService.getAllPlaylistConfigurations();
+
+  // Serialize dates to ISO strings for Apps Script compatibility
+  return configs.map((config) => ({
+    ...config,
+    lastTimestamp: config.lastTimestamp.toISOString(),
+  }));
+}
+
+export function savePlaylistConfiguration(
+  config: {
+    id?: string | null;
+    playlistId: string;
+    name?: string;
+    frequencyHours?: number | null;
+    deleteDays?: number | null;
+    lastTimestamp?: string | Date | null;
+    sources?: any[];
+    filters?: { excludeShorts?: boolean };
+  }
+): string {
+  const { service: sheetConfigService } = SheetConfigService.initialize();
+  return sheetConfigService.savePlaylistConfiguration(
+    config.id ?? null,
+    config.playlistId,
+    config.name?.trim(),
+    config.frequencyHours ?? null,
+    config.deleteDays ?? null,
+    config.lastTimestamp ?? null,
+    config.sources ?? [],
+    config.filters ?? {}
+  );
+}
+
+export function updatePlaylistNow(configId: string): void {
+  const errorTracker = new ErrorTracker();
+  const { service: sheetConfigService, spreadsheet } =
+    SheetConfigService.initialize();
+  const playlistUpdateService = new PlaylistUpdateService();
+  const debugLogService = new DebugLogService();
+  const videoFilterService = new VideoFilterService();
+  const configs = sheetConfigService.getAllPlaylistConfigurations();
+
+  const config = configs.find((candidate) => candidate.id === configId);
+
+  if (!config) {
+    throw new Error(`Playlist config ${configId} not found`);
+  }
+
+  debugLogService.initializeWithSpreadsheet(spreadsheet);
+  updateSinglePlaylist(
+    config,
+    errorTracker,
+    sheetConfigService,
+    playlistUpdateService,
+    videoFilterService,
+    debugLogService,
+    { skipIfNotDue: false }
+  );
+
+  if (errorTracker.getTotalErrorCount() > 0) {
+    throw new Error(
+      `${errorTracker.getTotalErrorCount()} video(s) were not added to the playlist correctly.`
+    );
   }
 }
 

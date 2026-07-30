@@ -9,15 +9,13 @@ import {
 } from './constants';
 import { PlaylistConfiguration, VideoSource } from '../models';
 import dateToIsoString from './dateUtils';
-import { makeid, onOpen } from '../ui';
+import { onOpen } from '../ui';
 
 /**
  * Service responsible for reading and writing playlist configurations to the sheet.
  */
 export default class SheetConfigService {
   private readonly sheet: GoogleAppsScript.Spreadsheet.Sheet;
-
-  private readonly idToRow: Map<string, number> = new Map();
 
   private constructor(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
     this.sheet = sheet;
@@ -94,7 +92,7 @@ export default class SheetConfigService {
         lastTimestamp = new Date(lastTimestampStr);
       }
 
-      const id = makeid();
+      const id = `row-${iRow}`;
       const config: PlaylistConfiguration = {
         id,
         name: playlistName || 'Playlist',
@@ -116,7 +114,6 @@ export default class SheetConfigService {
         },
       };
 
-      this.idToRow.set(id, iRow);
       configs.push(config);
     }
 
@@ -127,32 +124,94 @@ export default class SheetConfigService {
    * Update the last timestamp for a given config id.
    */
   updateLastTimestamp(id: string, timestamp: Date): void {
-    const rowIndex = this.idToRow.get(id);
-    if (rowIndex === undefined) {
-      throw new Error(`Config id ${id} not found`);
-    }
+    const rowIndex = this.getRowIndexFromId(id);
     this.sheet
       .getRange(rowIndex + 1, reservedColumnTimestamp + 1)
       .setValue(timestamp.toISOString());
   }
 
   /**
-   * Update the playlist name for a given config id.
-   * The name is stored inline with the playlist ID using the format: playlistId@name
-   * @param id - The internal config ID
+   * Save a playlist configuration row.
+   * If configId is provided and valid, update the existing row.
+   * Otherwise append a new playlist configuration row.
+   * @param configId - Optional internal config ID
    * @param playlistId - The YouTube playlist ID
-   * @param name - The playlist name (empty string removes the name)
+   * @param name - Optional friendly playlist name
+   * @param frequencyHours - Optional update frequency in hours
+   * @param deleteDays - Optional delete age in days
+   * @param lastTimestamp - Optional last update timestamp
+   * @param sources - Optional array of source entries
+   * @param filters - Optional filters
    */
-  updatePlaylistName(id: string, playlistId: string, name: string): void {
-    const rowIndex = this.idToRow.get(id);
-    if (rowIndex === undefined) {
-      throw new Error(`Config id ${id} not found`);
+  savePlaylistConfiguration(
+    configId: string | null,
+    playlistId: string,
+    name?: string,
+    frequencyHours?: number | null,
+    deleteDays?: number | null,
+    lastTimestamp?: string | Date | null,
+    sources?: VideoSource[],
+    filters?: { excludeShorts?: boolean }
+  ): string {
+    const playlistValue = name ? `${playlistId}@${name}` : playlistId;
+    const shouldUseDefaultTimestamp =
+      configId === null && (lastTimestamp === null || lastTimestamp === undefined);
+    const timestampValue = lastTimestamp
+      ? new Date(lastTimestamp).toISOString()
+      : shouldUseDefaultTimestamp
+      ? dateToIsoString(new Date(new Date().setHours(new Date().getHours() - 24)))
+      : '';
+    const frequencyValue =
+      frequencyHours === null || frequencyHours === undefined
+        ? ''
+        : frequencyHours;
+    const deleteDaysValue =
+      deleteDays === null || deleteDays === undefined ? '' : deleteDays;
+    const shortsValue = filters?.excludeShorts ? 'No' : '';
+    const sourceValues: string[] = (sources ?? []).map((source) => {
+      switch (source.type) {
+        case 'channel':
+          return source.channelId;
+        case 'username':
+          return source.username;
+        case 'subscriptions':
+          return 'ALL';
+        case 'playlist':
+          return source.playlistId;
+        default:
+          return '';
+      }
+    });
+
+    const rowValues: Array<string | number> = [
+      playlistValue,
+      timestampValue,
+      frequencyValue,
+      deleteDaysValue,
+      shortsValue,
+      ...sourceValues,
+    ];
+
+    if (configId) {
+      const rowIndex = this.getRowIndexFromId(configId);
+
+      const totalColumns = this.sheet.getLastColumn();
+      const clearColumns = totalColumns - reservedTableColumns;
+      if (clearColumns > 0) {
+        this.sheet
+          .getRange(rowIndex + 1, reservedTableColumns + 1, 1, clearColumns)
+          .clearContent();
+      }
+
+      this.sheet
+        .getRange(rowIndex + 1, 1, 1, rowValues.length)
+        .setValues([rowValues]);
+      return configId;
     }
 
-    const newValue = name ? `${playlistId}@${name}` : playlistId;
-    this.sheet
-      .getRange(rowIndex + 1, reservedColumnPlaylist + 1)
-      .setValue(newValue);
+    this.sheet.appendRow(rowValues);
+    const newRowIndex: number = this.sheet.getLastRow() - 1;
+    return `row-${newRowIndex}`;
   }
 
   /**
@@ -203,5 +262,13 @@ export default class SheetConfigService {
     }
 
     return sources;
+  }
+
+  private getRowIndexFromId(id: string): number {
+    const rowIndex = id.split('-')[1] ? parseInt(id.split('-')[1], 10) : undefined;
+    if (rowIndex === undefined) {
+      throw new Error(`Config id ${id} not found`);
+    }
+    return rowIndex;
   }
 }

@@ -1,4 +1,9 @@
-import { onOpen, openDialogMUI, openAboutSidebar } from './ui';
+import {
+  onOpen,
+  openDialogMUI,
+  openAboutSidebar,
+  openPlaylistManager,
+} from './ui';
 
 import { getSheetsData, addSheet, deleteSheet, setActiveSheet } from './sheets';
 
@@ -8,6 +13,9 @@ import {
   doGet,
   playlist,
   getChannelId,
+  getPlaylists,
+  savePlaylistConfiguration,
+  updatePlaylistNow,
 } from './sheetScript';
 
 // Public functions must be exported as named exports
@@ -15,6 +23,7 @@ export {
   onOpen,
   openDialogMUI,
   openAboutSidebar,
+  openPlaylistManager,
   getSheetsData,
   addSheet,
   deleteSheet,
@@ -24,4 +33,7 @@ export {
   doGet,
   playlist,
   getChannelId,
+  getPlaylists,
+  savePlaylistConfiguration,
+  updatePlaylistNow,
 };

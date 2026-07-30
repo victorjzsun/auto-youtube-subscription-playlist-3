@@ -1,10 +1,11 @@
 export function onOpen(): void {
   SpreadsheetApp.getUi()
-    .createMenu('My Sample React Project') // edit me!
+    .createMenu('YouTube Controls')
+    .addItem('Manage Playlists', 'openPlaylistManager')
     .addItem('Sheet Editor (MUI)', 'openDialogMUI')
-    .addItem('About me', 'openAboutSidebar')
     .addItem('Update Playlists', 'updatePlaylists')
     .addItem('Get Channel ID', 'getChannelId')
+    .addItem('About', 'openAboutSidebar')
     .addToUi();
 
   const ss: GoogleAppsScript.Spreadsheet.Spreadsheet =
@@ -31,6 +32,13 @@ export const openDialogMUI = () => {
 export const openAboutSidebar = () => {
   const html = HtmlService.createHtmlOutputFromFile('sidebar-about-page');
   SpreadsheetApp.getUi().showSidebar(html);
+};
+
+export const openPlaylistManager = () => {
+  const html = HtmlService.createHtmlOutputFromFile('playlist-manager')
+    .setWidth(1200)
+    .setHeight(600);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Playlist Manager');
 };
 
 export const makeid = () => {
