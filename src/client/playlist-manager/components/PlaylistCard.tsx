@@ -1,5 +1,5 @@
 import React from 'react';
-import { PlaylistConfiguration, VideoSource } from '../types';
+import type { PlaylistConfiguration, VideoSource } from '../types';
 import { serverFunctions } from '../../utils/serverFunctions';
 import { buildYouTubePlaylistUrl } from '../utils';
 

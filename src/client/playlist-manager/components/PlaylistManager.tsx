@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PlaylistList from './PlaylistList';
-import { PlaylistConfiguration } from '../types';
+import type { PlaylistConfiguration } from '../types';
 import { serverFunctions } from '../../utils/serverFunctions';
 import { parsePlaylistId } from '../utils';
 

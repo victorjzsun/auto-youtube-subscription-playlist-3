@@ -1,7 +1,7 @@
 import React from 'react';
 import PlaylistCard from './PlaylistCard';
 import EmptyState from './EmptyState';
-import { PlaylistConfiguration } from '../types';
+import type { PlaylistConfiguration } from '../types';
 
 interface PlaylistListProps {
   playlists: PlaylistConfiguration[];
