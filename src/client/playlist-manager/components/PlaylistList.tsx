@@ -7,7 +7,7 @@ interface PlaylistListProps {
   playlists: PlaylistConfiguration[];
   loading: boolean;
   error: string | null;
-  onRename: (playlistId: string, name: string) => void;
+  onRename: (configId: string, name: string) => void;
 }
 
 const PlaylistList: React.FC<PlaylistListProps> = ({

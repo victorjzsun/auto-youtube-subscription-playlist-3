@@ -5,7 +5,7 @@ import { buildYouTubePlaylistUrl } from '../utils';
 
 interface PlaylistCardProps {
   playlistConfig: PlaylistConfiguration;
-  onRename: (playlistId: string, name: string) => void;
+  onRename: (configId: string, name: string) => void;
 }
 
 const PlaylistCard: React.FC<PlaylistCardProps> = ({
@@ -88,7 +88,7 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
   const handleUpdateNow = async () => {
     try {
       await serverFunctions.updatePlaylistNow(playlistConfig.id);
-      window.alert('Playlist update started.');
+      window.alert('Playlist update finished.');
     } catch (error: unknown) {
       window.alert(
         error instanceof Error ? error.message : 'Failed to update playlist'
