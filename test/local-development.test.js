@@ -26,7 +26,10 @@ const srcTestFile = path.join(
   '../src/client/dialog-demo-mui/components/SheetEditor.jsx'
 );
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const wait = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 const viteDevServerReady = async (process) => {
   console.log('Waiting for vite to serve...');

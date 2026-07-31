@@ -155,12 +155,16 @@ export default class SheetConfigService {
   ): string {
     const playlistValue = name ? `${playlistId}@${name}` : playlistId;
     const shouldUseDefaultTimestamp =
-      configId === null && (lastTimestamp === null || lastTimestamp === undefined);
-    const timestampValue = lastTimestamp
-      ? new Date(lastTimestamp).toISOString()
-      : shouldUseDefaultTimestamp
-      ? dateToIsoString(new Date(new Date().setHours(new Date().getHours() - 24)))
-      : '';
+      configId === null &&
+      (lastTimestamp === null || lastTimestamp === undefined);
+    let timestampValue = '';
+    if (lastTimestamp) {
+      timestampValue = new Date(lastTimestamp).toISOString();
+    } else if (shouldUseDefaultTimestamp) {
+      timestampValue = dateToIsoString(
+        new Date(new Date().setHours(new Date().getHours() - 24))
+      );
+    }
     const frequencyValue =
       frequencyHours === null || frequencyHours === undefined
         ? ''
@@ -265,7 +269,9 @@ export default class SheetConfigService {
   }
 
   private getRowIndexFromId(id: string): number {
-    const rowIndex = id.split('-')[1] ? parseInt(id.split('-')[1], 10) : undefined;
+    const rowIndex = id.split('-')[1]
+      ? parseInt(id.split('-')[1], 10)
+      : undefined;
     if (rowIndex === undefined) {
       throw new Error(`Config id ${id} not found`);
     }

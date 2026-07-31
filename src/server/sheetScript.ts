@@ -233,18 +233,16 @@ export function getPlaylists(): any[] {
   }));
 }
 
-export function savePlaylistConfiguration(
-  config: {
-    id?: string | null;
-    playlistId: string;
-    name?: string;
-    frequencyHours?: number | null;
-    deleteDays?: number | null;
-    lastTimestamp?: string | Date | null;
-    sources?: any[];
-    filters?: { excludeShorts?: boolean };
-  }
-): string {
+export function savePlaylistConfiguration(config: {
+  id?: string | null;
+  playlistId: string;
+  name?: string;
+  frequencyHours?: number | null;
+  deleteDays?: number | null;
+  lastTimestamp?: string | Date | null;
+  sources?: any[];
+  filters?: { excludeShorts?: boolean };
+}): string {
   const { service: sheetConfigService } = SheetConfigService.initialize();
   return sheetConfigService.savePlaylistConfiguration(
     config.id ?? null,

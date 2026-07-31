@@ -1,5 +1,3 @@
-const PLAYLIST_ID_STORAGE_KEY = 'playlist-manager-playlist-ids';
-
 export const parsePlaylistId = (input) => {
   const trimmedInput = input.trim();
   if (!trimmedInput) return null;

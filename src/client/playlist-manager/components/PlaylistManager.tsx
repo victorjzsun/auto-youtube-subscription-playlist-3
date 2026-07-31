@@ -63,9 +63,11 @@ const PlaylistManager: React.FC = () => {
         name: friendlyName?.trim() || undefined,
       });
       loadPlaylists();
-    } catch (error: unknown) {
+    } catch (caughtError: unknown) {
       setError(
-        error instanceof Error ? error.message : 'Failed to add playlist'
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Failed to add playlist'
       );
       setLoading(false);
     }
@@ -79,9 +81,11 @@ const PlaylistManager: React.FC = () => {
     try {
       await serverFunctions.updatePlaylists();
       loadPlaylists();
-    } catch (error: unknown) {
+    } catch (caughtError: unknown) {
       setError(
-        error instanceof Error ? error.message : 'Failed to update playlists'
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Failed to update playlists'
       );
       setLoading(false);
     } finally {

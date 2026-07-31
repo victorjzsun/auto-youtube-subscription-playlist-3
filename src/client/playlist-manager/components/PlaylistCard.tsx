@@ -49,7 +49,9 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
   const handleConfigure = async () => {
     const nextName = window.prompt(
       'Enter a display name for this playlist',
-      playlistConfig.name && playlistConfig.name !== 'Playlist' ? playlistConfig.name : ''
+      playlistConfig.name && playlistConfig.name !== 'Playlist'
+        ? playlistConfig.name
+        : ''
     );
 
     if (nextName === null) return;
@@ -125,7 +127,9 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
         <div className="info-item">
           <span className="info-label">Auto-Delete After</span>
           <span className="info-value">
-            {playlistConfig.deleteDays ? `${playlistConfig.deleteDays} days` : 'Never'}
+            {playlistConfig.deleteDays
+              ? `${playlistConfig.deleteDays} days`
+              : 'Never'}
           </span>
         </div>
       </div>
@@ -134,14 +138,16 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
         <div className="sources-list">
           <div className="sources-label">Video Sources</div>
           <div className="source-tags">
-            {playlistConfig.sources.map((source: VideoSource, index: number) => (
-              <span
-                key={index}
-                className={`source-tag ${getSourceTag(source.type)}`}
-              >
-                {getSourceLabel(source)}
-              </span>
-            ))}
+            {playlistConfig.sources.map(
+              (source: VideoSource, index: number) => (
+                <span
+                  key={index}
+                  className={`source-tag ${getSourceTag(source.type)}`}
+                >
+                  {getSourceLabel(source)}
+                </span>
+              )
+            )}
           </div>
         </div>
       )}
@@ -162,7 +168,10 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
           </svg>
           <span className="btn-text">Update Now</span>
         </button>
-        <button className="btn btn-secondary btn-sm" onClick={handleViewPlaylist}>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={handleViewPlaylist}
+        >
           <svg
             className="btn-icon"
             fill="currentColor"
