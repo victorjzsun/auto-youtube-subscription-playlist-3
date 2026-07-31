@@ -23,8 +23,10 @@ jest.setTimeout(180000);
 
 const srcTestFile = path.join(
   __dirname,
-  '../src/client/dialog-demo-bootstrap/components/SheetEditor.jsx'
+  '../src/client/dialog-demo-mui/components/SheetEditor.jsx'
 );
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const viteDevServerReady = async (process) => {
   console.log('Waiting for vite to serve...');
@@ -43,7 +45,7 @@ describe(`Local setup ${isExtended ? '*extended*' : ''}`, () => {
   const containerSelector = isExtended ? 'div[role="dialog"]' : 'body';
 
   beforeAll(async () => {
-    process = exec('yarn dev');
+    process = exec('npm run dev');
     page = await global.__BROWSER_GLOBAL__.newPage();
 
     await page.setViewport({
@@ -57,10 +59,8 @@ describe(`Local setup ${isExtended ? '*extended*' : ''}`, () => {
     if (isExtended) {
       await openAddon(page);
     } else {
-      await page.goto(
-        'https://localhost:3000/dialog-demo-bootstrap/index.html'
-      );
-      await page.waitForTimeout(3000);
+      await page.goto('https://localhost:3000/dialog-demo-mui/index.html');
+      await wait(3000);
     }
   });
 
@@ -75,37 +75,37 @@ describe(`Local setup ${isExtended ? '*extended*' : ''}`, () => {
     await expect(image).toMatchImageSnapshot();
   });
 
-  it('should modify Bootstrap title example', async () => {
+  it('should modify MUI title example', async () => {
     const data = await fs.promises.readFile(srcTestFile, 'utf8');
     const result = data
       .replace(
-        '<b>☀️ Bootstrap demo! ☀️</b>',
-        '<b>☀️ This is modified text in local development ☀️</b>'
+        '<Typography variant="h4" gutterBottom>\n        ☀️ MUI demo! ☀️\n      </Typography>',
+        '<Typography variant="h4" gutterBottom>\n        ☀️ This is modified text in local development ☀️\n      </Typography>'
       )
       .replace(
         "{ padding: '3px', overflowX: 'hidden' }",
         "{ padding: '3px', overflowX: 'hidden', backgroundColor: 'black', color: 'white' }"
       );
     await fs.promises.writeFile(srcTestFile, result, 'utf8');
-    await page.waitForTimeout(4000);
+    await wait(4000);
     const container = await page.$(containerSelector);
     const image = await container.screenshot();
     await expect(image).toMatchImageSnapshot();
   });
 
-  it('should modify Bootstrap title example back to original', async () => {
+  it('should modify MUI title example back to original', async () => {
     const data = await fs.promises.readFile(srcTestFile, 'utf8');
     const result = data
       .replace(
-        '<b>☀️ This is modified text in local development ☀️</b>',
-        '<b>☀️ Bootstrap demo! ☀️</b>'
+        '<Typography variant="h4" gutterBottom>\n        ☀️ This is modified text in local development ☀️\n      </Typography>',
+        '<Typography variant="h4" gutterBottom>\n        ☀️ MUI demo! ☀️\n      </Typography>'
       )
       .replace(
         "{ padding: '3px', overflowX: 'hidden', backgroundColor: 'black', color: 'white' }",
         "{ padding: '3px', overflowX: 'hidden' }"
       );
     await fs.promises.writeFile(srcTestFile, result, 'utf8');
-    await page.waitForTimeout(4000);
+    await wait(4000);
     const container = await page.$(containerSelector);
     const image = await container.screenshot();
     await expect(image).toMatchImageSnapshot();
