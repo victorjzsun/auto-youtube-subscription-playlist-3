@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install packages
-        run: yarn install
+        run: npm install
       - name: Allow running mkcert on Mac
         run: sudo security authorizationdb write com.apple.trust-settings.admin allow
         if: runner.os == 'MacOS'
@@ -30,8 +30,8 @@ jobs:
       - name: Run mkcert setup [mkcert -install]
         run: mkcert -install
         if: runner.os == 'MacOS'
-      - name: Install https cert [yarn setup:https]
-        run: yarn setup:https
+      - name: Install https cert [npm run setup:https]
+        run: npm run setup:https
         if: runner.os == 'MacOS'
       - run: |
           mkdir certs
@@ -39,5 +39,5 @@ jobs:
         shell: pwsh
         if: runner.os == 'Windows'
       - name: Run integration tests
-        run: yarn test:integration
+        run: npm run test:integration
         shell: bash
