@@ -7,6 +7,9 @@ on:
 jobs:
   extended-integration-test:
     runs-on: ${{ matrix.os }}
+    environment:
+      name: Test
+      deployment: false
     strategy:
       matrix:
         os: [macos-13, windows-2022]
